@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ValidationError
 
 from ..errors import ConfigError, LlmError
-from ..netgate import HttpResponse, TimeoutException, TransportError
+from ..netgate import HttpResponse, HttpStatusError, TimeoutException, TransportError
 from .cache import request_key
 
 log = logging.getLogger(__name__)
@@ -229,6 +229,12 @@ class LlmClient:
                         continue
                 response.raise_for_status()
                 return response  # type: ignore[no-any-return]
+            except HttpStatusError as exc:
+                raise LlmError(
+                    f"LLM endpoint returned HTTP {exc.response.status_code}",
+                    "Check the endpoint, credentials and provider availability.",
+                    "llm-transport",
+                ) from exc
             except (TimeoutException, TransportError) as exc:
                 if self.on_usage:
                     self.on_usage(purpose, model, estimated_usage, False)

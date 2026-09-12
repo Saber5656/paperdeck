@@ -21,6 +21,7 @@ Purpose = Literal["arxiv", "llm"]
 HttpResponse = httpx.Response
 TimeoutException = httpx.TimeoutException
 TransportError = httpx.TransportError
+HttpStatusError = httpx.HTTPStatusError
 _ARXIV_HOSTS = {"arxiv.org", "www.arxiv.org", "export.arxiv.org"}
 _LOG = logging.getLogger(__name__)
 
