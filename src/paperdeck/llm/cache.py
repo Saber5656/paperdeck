@@ -10,6 +10,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ValidationError
 
@@ -17,14 +18,27 @@ log = logging.getLogger(__name__)
 
 
 def request_key(
-    model: str, messages: list[dict[str, Any]], schema_name: str, schema_version: str
+    model: str,
+    messages: list[dict[str, Any]],
+    schema_name: str,
+    schema_version: str,
+    *,
+    provider: str | None = None,
 ) -> str:
-    payload = {
+    payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "schema_name": schema_name,
         "schema_version": schema_version,
     }
+    if provider is not None:
+        endpoint = urlsplit(provider)
+        payload["provider"] = {
+            "scheme": endpoint.scheme.lower(),
+            "host": endpoint.hostname,
+            "port": endpoint.port or (443 if endpoint.scheme.lower() == "https" else 80),
+            "path": endpoint.path.rstrip("/"),
+        }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     return hashlib.sha256(raw).hexdigest()
 
@@ -37,6 +51,7 @@ class LlmCache:
         self.cache = cache
         self.enabled = enabled
         self._identity_by_key: dict[str, tuple[str, str, str]] = {}
+        self._usage_by_key: dict[str, dict[str, Any]] = {}
 
     def bind_model(
         self, cache_key: str, model: str, schema_name: str = "", schema_version: str = "v1"
@@ -80,7 +95,13 @@ class LlmCache:
                     pass
             log.info("llm-cache-stale key=%s", cache_key)
             return None
+        usage = payload.get("usage", {})
+        self._usage_by_key[cache_key] = dict(usage) if isinstance(usage, dict) else {}
         return str(content)
+
+    def get_usage(self, cache_key: str) -> dict[str, Any]:
+        """Return original usage for a validated replay, without adding billable usage."""
+        return dict(self._usage_by_key.get(cache_key, {}))
 
     def put(
         self,

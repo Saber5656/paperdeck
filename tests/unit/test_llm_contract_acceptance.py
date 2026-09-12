@@ -75,6 +75,7 @@ def test_real_client_cache_replay_has_no_transport_or_billable_usage(tmp_path):
         ledger.record(*item)
     assert ledger.cache_hits == 1 and ledger.token_count() == 15
     assert ledger.spent_usd() == pytest.approx(0.0001)
+    assert ledger.records[-1]["usage_original"] == {"prompt_tokens": 10, "completion_tokens": 5}
 
 
 def test_cost_estimate_uses_the_distinct_vision_model_price():
