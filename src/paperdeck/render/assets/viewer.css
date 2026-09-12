@@ -120,6 +120,7 @@ th { font-weight: 600; }
 }
 /* Print */
 @media (max-width: 420px) {
+  #pd-header { padding: 0 8px; gap: 4px; }
   .pd-brand { font-size: 18px; }
   .pd-controls button { padding: 8px 6px; }
   .pd-help-wide { display: none; }
