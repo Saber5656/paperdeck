@@ -1,0 +1,22 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "latex": {
+      "maxLength": 4000,
+      "title": "Latex",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    }
+  },
+  "required": [
+    "latex",
+    "confidence"
+  ],
+  "title": "PdfEquationLatexV1",
+  "type": "object"
+}

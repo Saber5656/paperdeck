@@ -63,7 +63,17 @@ def assemble_pdf(
     llm_provenance: Any = None,
     llm: Any = None,
 ) -> Any:
-    from ...ir.model import Document, Figure, Meta, Paragraph, Provenance, Section, Source, Table
+    from ...ir.model import (
+        Document,
+        Figure,
+        Meta,
+        Paragraph,
+        Provenance,
+        Section,
+        Source,
+        Table,
+        Unhandled,
+    )
 
     bibliography, numeric_index, _, bib_warnings = bib_result
     paragraph_blocks = [
@@ -81,8 +91,27 @@ def assemble_pdf(
     for idx, text in enumerate(paragraph_texts):
         all_splices.append(link_structural_refs([text], numbers_map)[0] + cite_splices[idx])
     body: list[Any] = []
+    section_stack: list[Any] = []
     section_counters: list[int] = []
     para_idx = 0
+    section_idx = 0
+    figure_idx = 0
+    table_idx = 0
+
+    def add_node(node: Any) -> None:
+        if getattr(node, "type", None) == "section":
+            while section_stack and section_stack[-1].level >= node.level:
+                section_stack.pop()
+            if section_stack:
+                section_stack[-1].children.append(node)
+            else:
+                body.append(node)
+            section_stack.append(node)
+        elif section_stack:
+            section_stack[-1].children.append(node)
+        else:
+            body.append(node)
+
     for block in blocks:
         info = seg.roles.get(block.id)
         if info is None or info.role in {"noise", "bib_entry", "author_line", "title", "abstract"}:
@@ -94,8 +123,9 @@ def assemble_pdf(
                 section_counters.append(0)
             section_counters[-1] += 1
             number = ".".join(str(value) for value in section_counters)
-            sid = f"sec-{len([x for x in body if getattr(x, 'type', '') == 'section']) + 1}"
-            body.append(
+            section_idx += 1
+            sid = f"sec-{section_idx}"
+            add_node(
                 Section(
                     id=sid,
                     level=min(level, 6),
@@ -107,13 +137,13 @@ def assemble_pdf(
             numbers_map[("sec", number)] = sid
         elif info.role == "paragraph":
             pid = f"para-{para_idx + 1}"
-            body.append(Paragraph(id=pid, content=apply_splices(block.text, all_splices[para_idx])))
+            add_node(Paragraph(id=pid, content=apply_splices(block.text, all_splices[para_idx])))
             para_idx += 1
         elif info.role == "display_equation" and block.id in eq_result.equations:
             draft = eq_result.equations[block.id]
             from ...ir.model import Equation
 
-            body.append(
+            add_node(
                 Equation(
                     id=draft.anchor_id,
                     number=draft.number,
@@ -125,17 +155,21 @@ def assemble_pdf(
                 )
             )
             numbers_map[("eq", draft.number)] = draft.anchor_id
+        elif info.role == "display_equation":
+            add_node(Unhandled(id=f"unhandled-{block.id}", text=block.text))
         elif info.role == "figure_caption":
-            fid = f"fig-{len([x for x in body if getattr(x, 'type', '') == 'figure']) + 1}"
+            figure_idx += 1
+            fid = f"fig-{figure_idx}"
             asset_id = _crop_region(pdfdoc, block, blocks, eq_result, settings, "figure", fid)
             caption = [_text(block.text)]
-            body.append(Figure(id=fid, number=info.number_text, asset_id=asset_id, caption=caption))
+            add_node(Figure(id=fid, number=info.number_text, asset_id=asset_id, caption=caption))
             if info.number_text:
                 numbers_map[("fig", info.number_text.strip("()"))] = fid
         elif info.role == "table_caption":
-            tid = f"tab-{len([x for x in body if getattr(x, 'type', '') == 'table']) + 1}"
+            table_idx += 1
+            tid = f"tab-{table_idx}"
             asset_id = _crop_region(pdfdoc, block, blocks, eq_result, settings, "table", tid)
-            body.append(
+            add_node(
                 Table(
                     id=tid,
                     number=info.number_text,
@@ -147,16 +181,34 @@ def assemble_pdf(
             if info.number_text:
                 numbers_map[("tab", info.number_text.strip("()"))] = tid
     # Resolve structural references after node anchors are known.
-    for index, item in enumerate(body):
-        if getattr(item, "type", None) != "paragraph":
-            continue
-        raw = paragraph_sources.get(item.id, "")
-        structural = link_structural_refs([raw], numbers_map)[0]
-        source_index = next(
-            (i for i, block in enumerate(paragraph_blocks) if block.id == item.id), 0
-        )
-        cites = cite_splices[source_index] if source_index < len(cite_splices) else []
-        body[index] = Paragraph(id=item.id, content=apply_splices(raw, structural + cites))
+    source_indices = {block.id: i for i, block in enumerate(paragraph_blocks)}
+
+    def resolve_nodes(nodes: list[Any]) -> list[Any]:
+        resolved: list[Any] = []
+        for item in nodes:
+            if getattr(item, "type", None) == "paragraph":
+                raw = paragraph_sources.get(item.id, "")
+                structural = link_structural_refs([raw], numbers_map)[0]
+                source_index = source_indices.get(item.id, -1)
+                cites = cite_splices[source_index] if source_index >= 0 else []
+                resolved.append(
+                    Paragraph(id=item.id, content=apply_splices(raw, structural + cites))
+                )
+            elif getattr(item, "type", None) == "section":
+                resolved.append(
+                    Section(
+                        id=item.id,
+                        level=item.level,
+                        number=item.number,
+                        title=item.title,
+                        children=resolve_nodes(item.children),
+                    )
+                )
+            else:
+                resolved.append(item)
+        return resolved
+
+    body = resolve_nodes(body)
     titles = [
         block.text
         for block in blocks

@@ -72,3 +72,36 @@ def test_image_requires_one_user_message() -> None:
             images=[b"x"],
             max_tokens=20,
         )
+
+
+def test_compatibility_fallback_sticks_after_schema_rejection() -> None:
+    bodies = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        if len(bodies) == 1:
+            return httpx.Response(400, text="response_format json_schema unsupported")
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": '{"latex":"x","confidence":0.5}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {},
+            },
+        )
+
+    client = LlmClient(settings(), Gate(handler))
+    client.complete(
+        "equation", [{"role": "user", "content": "read"}], PdfEquationLatexV1, max_tokens=20
+    )
+    client.complete(
+        "equation", [{"role": "user", "content": "read2"}], PdfEquationLatexV1, max_tokens=20
+    )
+    assert bodies[0]["response_format"]["type"] == "json_schema"
+    assert bodies[1]["response_format"]["type"] == "json_object"
+    assert bodies[2]["response_format"]["type"] == "json_object"

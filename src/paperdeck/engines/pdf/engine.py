@@ -72,6 +72,18 @@ class PdfEngine:
                 if bib_blocks
                 else ([], {}, [], ["pdf-bib-empty"])
             )
+            from ...ir.model import LlmProvenance
+            records = ledger.records
+            usage_in = sum(int(item["usage"].get("prompt_tokens", 0) or 0) for item in records)
+            usage_out = sum(int(item["usage"].get("completion_tokens", 0) or 0) for item in records)
+            llm_provenance = LlmProvenance(
+                model=ctx.settings.llm.model,
+                vlm_model=ctx.settings.llm.vlm_model,
+                calls=len(records),
+                tokens_in=usage_in,
+                tokens_out=usage_out,
+                cost_usd=float(ledger.spent_usd() or 0.0),
+            )
             return assemble_pdf(
                 seg,
                 blocks,
@@ -81,6 +93,7 @@ class PdfEngine:
                 ctx.settings,
                 source=getattr(ctx.spec, "source", None),
                 llm=llm,
+                llm_provenance=llm_provenance,
             )
 
 
