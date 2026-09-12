@@ -122,9 +122,7 @@ def assemble_pdf(
             body.append(node)
 
     block_by_id = {block.id: block for block in blocks}
-    ordered_blocks = [
-        block_by_id[block_id] for block_id in seg.order if block_id in block_by_id
-    ]
+    ordered_blocks = [block_by_id[block_id] for block_id in seg.order if block_id in block_by_id]
     ordered_ids = {item.id for item in ordered_blocks}
     ordered_blocks.extend(block for block in blocks if block.id not in ordered_ids)
     merged_ids = {str(item[0]) for item in merged_paragraphs}
@@ -221,6 +219,7 @@ def assemble_pdf(
         **{block.id: i for i, block in enumerate(paragraph_blocks)},
         **paragraph_index_by_id,
     }
+
     def resolve_nodes(nodes: list[Any]) -> list[Any]:
         resolved: list[Any] = []
         for item in nodes:
@@ -329,10 +328,10 @@ def _crop_region(
             max(item.bbox[3] for item in linked),
         )
     else:
+
         def vertical(item: RawBlock) -> float:
-            return min(item.bbox[3], caption.bbox[3]) - max(
-                item.bbox[1], caption.bbox[1]
-            )
+            return min(item.bbox[3], caption.bbox[3]) - max(item.bbox[1], caption.bbox[1])
+
         beside = [
             item
             for item in page_blocks
