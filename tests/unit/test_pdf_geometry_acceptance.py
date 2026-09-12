@@ -50,8 +50,10 @@ def _png_dimensions_and_pixels(data: bytes) -> tuple[int, int, bytes]:
     rows = zlib.decompress(bytes(compressed))
     stride = width * 3
     assert len(rows) == (stride + 1) * height
-    return width, height, b"".join(
-        rows[row * (stride + 1) + 1 : (row + 1) * (stride + 1)] for row in range(height)
+    return (
+        width,
+        height,
+        b"".join(rows[row * (stride + 1) + 1 : (row + 1) * (stride + 1)] for row in range(height)),
     )
 
 
@@ -119,9 +121,9 @@ def test_png_encoder_and_crop_prove_dimensions_and_y_flip(tmp_path: Path) -> Non
         pixels = _png_dimensions_and_pixels(
             pdfdoc.bitmap(0, 1.0).crop_png((100, 500, 300, 550), 0)
         )[2]
-    dark_ratio = sum(
-        sum(pixels[index : index + 3]) < 90 for index in range(0, len(pixels), 3)
-    ) / (len(pixels) / 3)
+    dark_ratio = sum(sum(pixels[index : index + 3]) < 90 for index in range(0, len(pixels), 3)) / (
+        len(pixels) / 3
+    )
     assert dark_ratio > 0.95
 
 

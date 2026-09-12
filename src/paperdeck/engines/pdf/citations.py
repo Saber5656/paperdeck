@@ -151,6 +151,7 @@ def link_citations(
         result.append(splices)
     if author_candidates and llm is not None:
         markers = "\n".join(f"{i}: {candidate[2]}" for i, candidate in enumerate(author_candidates))
+
         def entry_text(item: Any) -> str:
             text = getattr(item, "text", None)
             if text:
