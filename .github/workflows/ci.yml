@@ -116,6 +116,7 @@ jobs:
         run: uv run python -m pytest tests/unit/test_check_licenses.py tests/unit/test_workflow_hygiene.py tests/unit/test_wheel_contents.py -q
       - name: Check golden self-containment
         run: |
+          test -n "$(find tests/goldens -type f -name '*.html' -print -quit)"
           find tests/goldens -type f -name '*.html' -print0 |
             while IFS= read -r -d '' html; do
               uv run python -m paperdeck.render.validate "$html"

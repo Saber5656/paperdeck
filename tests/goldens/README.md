@@ -11,3 +11,13 @@ pipeline test with `PAPERDECK_FAKE_NOW` set to a fixed ISO timestamp, inspect th
 rendered HTML and validator report, then update the corresponding JSON by hand. CI
 never regenerates these files; a changed golden must be reviewed with its fixture and
 the semantic test.
+# Rendered reader
+
+`reading-demo.html` is actual offline CLI output from `examples/reading-demo.tex`.
+CI validates this committed document and fails if the HTML golden set is empty.
+Regenerate after reviewed reader changes with:
+
+```sh
+uv run paperdeck -q convert examples/reading-demo.tex --offline --output tests/goldens/reading-demo.html --force
+uv run python -m paperdeck.render.validate tests/goldens/reading-demo.html
+```
