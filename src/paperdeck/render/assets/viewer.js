@@ -49,8 +49,8 @@
     // ---- feature: popup ----
     (() => {
       const popup = pd.element('div', 'pd-popup'); popup.setAttribute('role', 'tooltip'); popup.hidden = true; document.body.append(popup);
-      let showTimer, hideTimer, active;
-      function hide() { clearTimeout(showTimer); clearTimeout(hideTimer); popup.hidden = true; if (active) active.removeAttribute('aria-describedby'); active = null; }
+      let showTimer, hideTimer, focusFrame, active;
+      function hide() { clearTimeout(showTimer); clearTimeout(hideTimer); cancelAnimationFrame(focusFrame); popup.hidden = true; if (active) active.removeAttribute('aria-describedby'); active = null; }
       function show(link) {
         hide(); const target = document.getElementById(link.hash.slice(1)); if (!target) return;
         let source = target; if (target.tagName === 'SECTION') source = target.querySelector('h2,h3,h4,h5,h6') || target;
@@ -66,10 +66,10 @@
       const later = () => { clearTimeout(showTimer); clearTimeout(hideTimer); hideTimer = setTimeout(hide, 300); };
       pd.qsa('a.pd-ref[href^="#"]').forEach(link => {
         pd.on(link, 'mouseenter', () => { clearTimeout(hideTimer); clearTimeout(showTimer); showTimer = setTimeout(() => show(link), 150); });
-        pd.on(link, 'mouseleave', later); pd.on(link, 'focus', () => show(link)); pd.on(link, 'blur', later);
+        pd.on(link, 'mouseleave', later); pd.on(link, 'focus', () => { hide(); focusFrame = requestAnimationFrame(() => { if (document.activeElement === link) show(link); }); }); pd.on(link, 'blur', later);
       });
       pd.on(popup, 'mouseenter', () => clearTimeout(hideTimer)); pd.on(popup, 'mouseleave', later);
-      pd.on(window, 'scroll', hide, {passive: true}); pd.on(window, 'resize', hide); pd.popup = {hide};
+      pd.on(window, 'scroll', () => { clearTimeout(showTimer); if (!popup.hidden) hide(); }, {passive: true}); pd.on(window, 'resize', hide); pd.popup = {hide};
     })();
     // ---- feature: jump/back ----
     (() => {
@@ -103,18 +103,21 @@
       button.setAttribute('aria-controls', 'pd-toc');
       set(media.matches && stored !== 'closed', false); pd.on(button, 'click', () => set(!document.body.classList.contains('pd-toc-open')));
       pd.on(backdrop, 'click', () => set(false)); pd.on(media, 'change', () => set(media.matches && pd.store.get('pd-toc') !== 'closed', false));
-      pd.on(nav, 'click', event => { if (event.target.closest('a') && !media.matches) set(false); });
-      const links = pd.qsa('a.pd-toc-link', nav); const pinned = new Set();
+      pd.on(nav, 'click', event => { const link = event.target.closest('a.pd-toc-link'); if (link) current(link.hash.slice(1)); if (link && !media.matches) set(false); });
+      const links = pd.qsa('a.pd-toc-link', nav); const branches = new Map();
       function reveal(current) {
-        pd.qsa('li[data-level]', nav).forEach(li => {
-          const level = Number(li.dataset.level); const own = li.querySelector(':scope > a');
-          const ancestorCurrent = current && current.closest('li') && current.closest('li').contains(li);
-          li.hidden = level >= 3 && own !== current && !ancestorCurrent && !pinned.has(li.parentElement.closest('li'));
+        branches.forEach((branch, li) => {
+          const ancestor = current && li.contains(current) && li.querySelector(':scope > a') !== current;
+          const open = branch.expanded || ancestor;
+          branch.children.hidden = !open;
+          branch.button.setAttribute('aria-expanded', String(Boolean(open)));
+          branch.button.textContent = open ? 'Collapse' : 'Expand';
         });
       }
-      pd.qsa('li', nav).forEach(li => { const children = li.querySelector(':scope > ol'); if (!children) return;
-        const disclosure = pd.element('button', null, 'Expand'); disclosure.className = 'pd-disclosure'; disclosure.setAttribute('aria-expanded', 'false'); li.prepend(disclosure);
-        pd.on(disclosure, 'click', () => { if (pinned.has(li)) pinned.delete(li); else pinned.add(li); disclosure.setAttribute('aria-expanded', String(pinned.has(li))); disclosure.textContent = pinned.has(li) ? 'Collapse' : 'Expand'; reveal(pd.qs('.pd-current', nav)); });
+      pd.qsa('li', nav).forEach(li => { const children = li.querySelector(':scope > ol'); if (!children || !children.querySelector('li')) return;
+        const disclosure = pd.element('button', null, 'Expand'); disclosure.className = 'pd-disclosure'; li.prepend(disclosure);
+        const branch = {children, button: disclosure, expanded: Number(li.dataset.level) < 2}; branches.set(li, branch);
+        pd.on(disclosure, 'click', () => { branch.expanded = children.hidden; reveal(null); });
       });
       function current(id) {
         let active = null; links.forEach(link => { const yes = link.hash.slice(1) === id; link.classList.toggle('pd-current', yes); if (yes) { link.setAttribute('aria-current', 'location'); active = link; } else link.removeAttribute('aria-current'); });
@@ -123,7 +126,7 @@
       }
       let pending = false, next;
       if ('IntersectionObserver' in window) {
-        const spy = new IntersectionObserver(entries => { entries.forEach(entry => { if (entry.isIntersecting) next = entry.target.parentElement.id; }); if (!pending && next) { pending = true; requestAnimationFrame(() => { current(next); pending = false; }); } }, {rootMargin: '-10% 0px -80% 0px'});
+        const spy = new IntersectionObserver(entries => { entries.forEach(entry => { if (entry.isIntersecting) next = entry.target.parentElement.id; }); if (!pending && next) { pending = true; requestAnimationFrame(() => { current(next); pending = false; }); } }, {rootMargin: '-54px 0px -75% 0px'});
         pd.qsa('main section > h2,main section > h3,main section > h4,main section > h5,main section > h6').forEach(heading => spy.observe(heading));
       }
       reveal(null); pd.toc = {toggle: () => set(!document.body.classList.contains('pd-toc-open'))};
@@ -175,19 +178,19 @@
       const panel = pd.element('div'); panel.className = 'pd-help-panel'; panel.append(pd.element('h2', null, 'Keyboard shortcuts'));
       const table = pd.element('table'), close = pd.element('button', null, 'Close'); panel.append(table, close); overlay.append(panel); document.body.append(overlay);
       function hide() { overlay.hidden = true; if (previous && previous.isConnected) previous.focus(); }
-      function toggle() { if (!overlay.hidden) return hide(); previous = document.activeElement; table.replaceChildren(); registry.forEach((value, key) => { const row = pd.element('tr'); row.append(pd.element('th', null, key), pd.element('td', null, value.description)); table.append(row); }); overlay.hidden = false; close.focus(); }
+      function toggle(opener) { if (!overlay.hidden) return hide(); previous = opener || document.activeElement; table.replaceChildren(); registry.forEach((value, key) => { const row = pd.element('tr'); row.append(pd.element('th', null, key), pd.element('td', null, value.description)); table.append(row); }); overlay.hidden = false; close.focus(); }
       function register(key, description, handler) { if (registry.has(key)) throw new Error('Duplicate shortcut: ' + key); registry.set(key, {description, handler}); }
       const headings = pd.qsa('main section > h2,main section > h3,main section > h4,main section > h5,main section > h6');
       function section(direction) {
         const candidates = headings.filter(h => direction > 0 ? h.getBoundingClientRect().top > 80 : h.getBoundingClientRect().top < 40);
-        const target = direction > 0 ? candidates[0] : candidates.at(-1); if (target) target.scrollIntoView({behavior: pd.motion(), block: 'start'});
+        const target = direction > 0 ? candidates[0] : candidates.at(-1); if (target) window.scrollTo({top: target.getBoundingClientRect().top + scrollY - 72, behavior: pd.motion()});
       }
       register('j', 'Next section', () => section(1)); register('k', 'Previous section', () => section(-1));
       register('t', 'Toggle contents', () => pd.toc && pd.toc.toggle()); register('d', 'Cycle theme', () => pd.theme.cycle());
       register('Backspace', 'Back to reading position', pd.jump.back); register('?', 'Keyboard shortcuts', toggle);
       register('Escape', 'Close preview or help', () => { pd.popup.hide(); if (!overlay.hidden) hide(); });
       pd.on(close, 'click', hide); pd.on(overlay, 'click', event => { if (event.target === overlay) hide(); });
-      const helpButton = pd.qs('#pd-help-toggle'); if (helpButton) pd.on(helpButton, 'click', toggle);
+      const helpButton = pd.qs('#pd-help-toggle'); if (helpButton) pd.on(helpButton, 'click', () => toggle(helpButton));
       pd.on(document, 'keydown', event => {
         if (pd.editing(event)) return;
         if (!overlay.hidden) { if (event.key === 'Tab') { event.preventDefault(); close.focus(); return; } if (!['?', 'Escape'].includes(event.key)) return; }

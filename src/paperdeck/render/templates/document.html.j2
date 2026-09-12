@@ -6,7 +6,7 @@
 <html lang="en" data-theme="light" data-theme-mode="auto">
 <head>{% include '_head.j2' %}</head>
 <body>
-<header id="pd-header"><span class="pd-brand">paperdeck</span><span class="pd-header-title">{{ title }}</span><div class="pd-controls"><button id="pd-toc-toggle" aria-controls="pd-toc">Contents</button><button id="pd-theme-toggle">Theme: auto</button><button id="pd-help-toggle">Keyboard help</button></div></header>
+<header id="pd-header"><span class="pd-brand">paperdeck</span><span class="pd-header-title">{{ title }}</span><div class="pd-controls"><button id="pd-toc-toggle" aria-controls="pd-toc">Contents</button><button id="pd-theme-toggle">Theme: auto</button><button id="pd-help-toggle" aria-label="Keyboard help"><span class="pd-help-wide">Keyboard help</span><span class="pd-help-short">Help</span></button></div></header>
 <nav id="pd-toc" aria-label="Table of contents"><h2>Contents</h2>{{ toc(doc.body) }}</nav>
 <div id="pd-main-wrap"><main id="pd-content">
 <header class="pd-document-header"><h1>{{ inlines(doc.meta.title) }}</h1><p class="pd-authors">{{ doc.meta.authors|join(', ') }}</p>{% if doc.meta.links %}<p class="pd-source-links">{% for link in doc.meta.links %}<a href="{{ link.url }}" rel="noopener noreferrer" target="_blank">{{ link.kind }}</a>{% endfor %}</p>{% endif %}{% if doc.meta.abstract %}<details class="pd-abstract" open><summary>Abstract</summary>{{ blocks(doc.meta.abstract) }}</details>{% endif %}</header>
