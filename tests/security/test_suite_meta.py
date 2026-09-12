@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 # Bump this floor in the same change that adds or moves SEC-AC coverage.
-SEC_AC_TEST_FLOOR = 30
+SEC_AC_TEST_FLOOR = 52
 
 
 def test_security_suite_has_pinned_minimum() -> None:
