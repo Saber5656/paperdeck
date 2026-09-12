@@ -1,1 +1,156 @@
-"""PDF IR assembly placeholder."""
+"""Turn PDF segmentation results into the shared IR."""
+from __future__ import annotations
+
+import base64
+import re
+from datetime import datetime, timezone
+from typing import Any
+
+from .blocks import RawBlock
+from .citations import Splice, extract_bibliography, link_citations, link_structural_refs
+
+
+def _text(value: str) -> Any:
+    from ...ir.model import Text
+    return Text(text=value)
+
+
+def apply_splices(text: str, splices: list[Splice]) -> list[Any]:
+    """Convert non-overlapping character ranges into typed inline nodes."""
+    ordered = sorted(splices, key=lambda item: (item.start, item.end))
+    output: list[Any] = []
+    cursor = 0
+    for splice in ordered:
+        if splice.start < cursor or splice.end < splice.start or splice.end > len(text):
+            raise ValueError("overlapping or out-of-range citation splice")
+        if splice.start > cursor:
+            output.append(_text(text[cursor : splice.start]))
+        node = splice.node
+        try:
+            from ...ir.model import Cite, RefLink
+            if hasattr(node, "bib_ids"):
+                output.append(Cite(bib_ids=list(node.bib_ids), text=node.text))
+            elif hasattr(node, "target_id"):
+                output.append(RefLink(target_id=node.target_id, kind=node.kind, text=node.text))
+            else:
+                output.append(node)
+        except ImportError:
+            output.append(node)
+        cursor = splice.end
+    if cursor < len(text):
+        output.append(_text(text[cursor:]))
+    return output
+
+
+def _warning(code: str, where: str | None = None) -> Any:
+    from ...ir.model import Warning
+    return Warning(code=code.split(":", 1)[0], message=code, where=where)
+
+
+def assemble_pdf(seg: Any, blocks: list[RawBlock], eq_result: Any, bib_result: tuple[list[Any], dict[str, str], list[str], list[str]], pdfdoc: Any, settings: Any, *, source: Any = None, llm_provenance: Any = None) -> Any:
+    from ...ir.model import Document, Figure, Meta, Paragraph, Provenance, Section, Source, Table
+    by_id = {block.id: block for block in blocks}
+    bibliography, numeric_index, _, bib_warnings = bib_result
+    paragraph_blocks = [block for block in blocks if seg.roles.get(block.id) and seg.roles[block.id].role == "paragraph"]
+    paragraph_texts = [block.text for block in paragraph_blocks]
+    cite_splices = link_citations(paragraph_texts, bibliography, None)
+    numbers_map: dict[tuple[str, str], str] = {}
+    for block_id, draft in eq_result.equations.items():
+        numbers_map[("eq", draft.number)] = draft.anchor_id
+    all_splices: list[list[Splice]] = []
+    for idx, text in enumerate(paragraph_texts):
+        all_splices.append(link_structural_refs([text], numbers_map)[0] + cite_splices[idx])
+    body: list[Any] = []
+    section_counters: list[int] = []
+    heading_by_id = {item.block_id: item for root in seg.section_tree for item in _walk(root)}
+    para_idx = 0
+    for block in blocks:
+        info = seg.roles.get(block.id)
+        if info is None or info.role in {"noise", "bib_entry", "author_line", "title", "abstract"}:
+            continue
+        if info.role == "heading":
+            level = info.level or 1
+            section_counters = section_counters[: level - 1]
+            while len(section_counters) < level:
+                section_counters.append(0)
+            section_counters[-1] += 1
+            number = ".".join(str(value) for value in section_counters)
+            sid = f"sec-{len([x for x in body if getattr(x, 'type', '') == 'section']) + 1}"
+            body.append(Section(id=sid, level=min(level, 6), number=number, title=[_text(block.text)], children=[]))
+            numbers_map[("sec", number)] = sid
+        elif info.role == "paragraph":
+            pid = f"para-{para_idx + 1}"
+            body.append(Paragraph(id=pid, content=apply_splices(block.text, all_splices[para_idx])))
+            para_idx += 1
+        elif info.role == "display_equation" and block.id in eq_result.equations:
+            draft = eq_result.equations[block.id]
+            from ...ir.model import Equation
+            body.append(Equation(id=draft.anchor_id, number=draft.number, content_kind="image", latex=draft.latex, asset_id=draft.asset_id, latex_verified=False, confidence=draft.confidence))
+            numbers_map[("eq", draft.number)] = draft.anchor_id
+        elif info.role == "figure_caption":
+            fid = f"fig-{len([x for x in body if getattr(x, 'type', '') == 'figure']) + 1}"
+            asset_id = _crop_region(pdfdoc, block, blocks, eq_result, settings, "figure", fid)
+            caption = [_text(block.text)]
+            body.append(Figure(id=fid, number=info.number_text, asset_id=asset_id, caption=caption))
+            if info.number_text:
+                numbers_map[("fig", info.number_text.strip("()"))] = fid
+        elif info.role == "table_caption":
+            tid = f"tab-{len([x for x in body if getattr(x, 'type', '') == 'table']) + 1}"
+            asset_id = _crop_region(pdfdoc, block, blocks, eq_result, settings, "table", tid)
+            body.append(Table(id=tid, number=info.number_text, content_kind="image", asset_id=asset_id, caption=[_text(block.text)]))
+            if info.number_text:
+                numbers_map[("tab", info.number_text.strip("()"))] = tid
+    # Resolve structural references after node anchors are known.
+    for index, item in enumerate(body):
+        if getattr(item, "type", None) != "paragraph":
+            continue
+        raw = paragraph_texts[index] if index < len(paragraph_texts) else ""
+        structural = link_structural_refs([raw], numbers_map)[0]
+        body[index] = Paragraph(id=item.id, content=apply_splices(raw, structural + cite_splices[min(index, len(cite_splices) - 1)] if cite_splices else structural))
+    titles = [block.text for block in blocks if seg.roles.get(block.id) and seg.roles[block.id].role == "title"]
+    title = titles[0] if titles else str(getattr(pdfdoc, "metadata_title", ""))
+    if not title:
+        title = "PDF document"
+    authors = []
+    for block in blocks:
+        if seg.roles.get(block.id) and seg.roles[block.id].role == "author_line":
+            authors.extend(item.strip() for item in re.split(r",|;|\band\b", block.text, flags=re.I) if item.strip())
+    abstract_blocks = [Paragraph(id=f"para-abstract-{i}", content=[_text(block.text)]) for i, block in enumerate(blocks) if seg.roles.get(block.id) and seg.roles[block.id].role == "abstract"]
+    source_obj = source or Source(kind="local", original=str(getattr(pdfdoc, "path", "paper.pdf")))
+    prov = Provenance(engine="pdf", engine_versions={"paperdeck": "0.1.0"}, created_at=datetime.now(timezone.utc).isoformat(), fallbacks=[], llm=llm_provenance)
+    warnings = [_warning(item) for item in list(getattr(seg, "warnings", [])) + list(getattr(eq_result, "warnings", [])) + bib_warnings]
+    return Document(source=source_obj, provenance=prov, meta=Meta(title=[_text(title)], authors=authors, abstract=abstract_blocks or None, links=[]), body=body, bibliography=bibliography, assets=eq_result.assets, warnings=warnings)
+
+
+def _walk(node: Any) -> list[Any]:
+    result = [node]
+    for child in getattr(node, "children", ()):
+        result.extend(_walk(child))
+    return result
+
+
+def _crop_region(pdfdoc: Any, caption: RawBlock, blocks: list[RawBlock], result: Any, settings: Any, kind: str, anchor: str) -> str | None:
+    page_blocks = [item for item in blocks if item.page == caption.page and item.id != caption.id]
+    page_width, page_height = pdfdoc.page_size(caption.page)
+    above = [item for item in page_blocks if item.bbox[3] <= caption.bbox[1]]
+    bottom = max((item.bbox[3] for item in above), default=0.0)
+    bbox = (max(0.0, caption.bbox[0]), bottom, min(page_width, caption.bbox[2]), caption.bbox[1])
+    if bbox[2] - bbox[0] < 40 or bbox[3] - bbox[1] < 40:
+        result.warnings.append(f"pdf-figure-region-missing:{caption.id}")
+        return None
+    try:
+        data = pdfdoc.bitmap(caption.page, 2.0).crop_png(bbox, pad_pt=0)
+    except Exception:
+        result.warnings.append(f"pdf-figure-region-missing:{caption.id}")
+        return None
+    asset_id = f"asset-{kind}-{anchor}"
+    result.assets[asset_id] = _asset(asset_id, data, caption.page)
+    return asset_id
+
+
+def _asset(asset_id: str, data: bytes, page: int) -> Any:
+    from ...ir.model import Asset
+    return Asset(id=asset_id, mime="image/png", data_b64=base64.b64encode(data).decode("ascii"), origin={"engine": "pdf", "page": page})
+
+
+__all__ = ["apply_splices", "assemble_pdf"]
