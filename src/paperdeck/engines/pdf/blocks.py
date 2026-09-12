@@ -158,6 +158,7 @@ def build_blocks(pages: list[Any]) -> list[RawBlock]:
         )
         current: list[_Line] = []
         page_blocks: list[RawBlock] = []
+        current_column = 0
 
         def flush() -> None:  # noqa: B023
             if not current:
@@ -179,24 +180,29 @@ def build_blocks(pages: list[Any]) -> list[RawBlock]:
                         text,
                         statistics.median(float(c.font_size) for c in chars),
                         len(current),
-                        0,
+                        current_column,
                         median_height,
                     )
                 )
             current.clear()
 
-        previous: _Line | None = None
-        for line in ordered_lines:
-            if previous is not None:
-                gap = previous.bbox[1] - line.bbox[3]
-                jump = abs(line.font_size - previous.font_size) > 0.25 * max(
-                    line.font_size, previous.font_size
-                )
-                if gap > 1.8 * median_height or jump:
-                    flush()
-            current.append(line)
-            previous = line
-        flush()
+        for _column_index, column_lines in enumerate(columns):
+            current_column = _column_index
+            previous: _Line | None = None
+            for line in column_lines:
+                if previous is not None:
+                    gap = previous.bbox[1] - line.bbox[3]
+                    jump = abs(line.font_size - previous.font_size) > 0.25 * max(
+                        line.font_size, previous.font_size
+                    )
+                    if gap > 1.8 * median_height or jump:
+                        flush()
+                current.append(line)
+                previous = line
+            # A new column is a hard reading-order boundary.  Without this
+            # flush, the next column starts above the previous column and is
+            # incorrectly merged into its final block.
+            flush()
         for idx, block in enumerate(page_blocks):
             blocks.append(
                 RawBlock(
