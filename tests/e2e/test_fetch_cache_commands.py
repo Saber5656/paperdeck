@@ -22,10 +22,13 @@ def cached_client(tmp_path, monkeypatch):
     def response(request):
         seen.append(str(request.url))
         if "api/query" in str(request.url):
-            return httpx.Response(200, text='''<feed xmlns="http://www.w3.org/2005/Atom">
+            return httpx.Response(
+                200,
+                text="""<feed xmlns="http://www.w3.org/2005/Atom">
 <entry><id>http://arxiv.org/abs/2401.12345v2</id><title>Example</title>
 <summary>Abstract</summary><updated>2026-01-01T00:00:00Z</updated>
-<author><name>A. Researcher</name></author></entry></feed>''')
+<author><name>A. Researcher</name></author></entry></feed>""",
+            )
         if "/pdf/" in str(request.url):
             return httpx.Response(200, content=b"%PDF-1.7\nfixture")
         return httpx.Response(404)
