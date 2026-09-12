@@ -151,7 +151,13 @@ def link_citations(
         result.append(splices)
     if author_candidates and llm is not None:
         markers = "\n".join(f"{i}: {candidate[2]}" for i, candidate in enumerate(author_candidates))
-        entries = "\n".join(f"{i}: {getattr(item, 'text', '')}" for i, item in enumerate(bib))
+        def entry_text(item: Any) -> str:
+            text = getattr(item, "text", None)
+            if text:
+                return str(text)
+            return "".join(str(getattr(part, "text", "")) for part in getattr(item, "content", []))
+
+        entries = "\n".join(f"{i}: {entry_text(item)}" for i, item in enumerate(bib))
         response = llm.complete(
             "cite-map",
             [

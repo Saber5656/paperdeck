@@ -21,6 +21,7 @@ class RawBlock:
     line_count: int
     column: int = 0
     line_height_median: float = 0.0
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass
@@ -103,6 +104,8 @@ def detect_columns(lines: list[_Line], page_width: float) -> tuple[list[list[_Li
     ]
     if not central:
         return [sorted(lines, key=lambda x: (-x.bbox[3], x.bbox[0]))], None
+    if len(central) > 1:
+        return [sorted(lines, key=lambda x: (-x.bbox[3], x.bbox[0]))], "layout-columns-unhandled"
     valley = (central[0][0] + central[0][1] + 1) * 4
     left = [line for line in lines if line.bbox[2] <= valley]
     right = [line for line in lines if line.bbox[0] >= valley]
@@ -148,7 +151,7 @@ def build_blocks(pages: list[Any]) -> list[RawBlock]:
     for page, lines in zip(pages, line_lists, strict=True):
         page_idx = int(getattr(page, "page", len(blocks)))
         width = float(getattr(page, "width", max((line.bbox[2] for line in lines), default=0)))
-        columns, _ = detect_columns(lines, width)
+        columns, column_warning = detect_columns(lines, width)
         ordered_lines = [line for col in columns for line in col]
         median_height = (
             statistics.median([line.height for line in ordered_lines]) if ordered_lines else 10.0
@@ -205,6 +208,7 @@ def build_blocks(pages: list[Any]) -> list[RawBlock]:
                     block.line_count,
                     block.column,
                     block.line_height_median,
+                    (column_warning,) if column_warning and idx == 0 else (),
                 )
             )
     return blocks
