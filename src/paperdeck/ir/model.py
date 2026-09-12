@@ -117,7 +117,7 @@ class LlmProvenance(IRModel):
     calls: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
-    cost_usd: float = 0.0
+    cost_usd: float | None = 0.0
 
 
 class Provenance(IRModel):

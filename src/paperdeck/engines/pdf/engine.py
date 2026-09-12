@@ -153,7 +153,7 @@ class PdfEngine:
                 calls=len(records),
                 tokens_in=usage_in,
                 tokens_out=usage_out,
-                cost_usd=float(ledger.spent_usd() or 0.0),
+                cost_usd=ledger.spent_usd(),
             )
             ctx.run_metrics.update(
                 {
