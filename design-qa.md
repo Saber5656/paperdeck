@@ -74,3 +74,19 @@ FakeLLM remains outside this visual QA evidence.
 The main title uses the system font available on each reader's device. Pixel-identical
 font metrics across operating systems are not a v1 requirement. No blocking visual
 work remains; rerun the browser matrix after interaction or layout changes.
+
+## Final acceptance extension — 2026-09-13
+
+The complete node fixture was inspected at 1440×1024 in light and dark, 320×740,
+and print media. Captures are `docs/qa/kitchen-{light,dark,narrow,print}.jpg`.
+Its deliberate script-like title, code, and unsupported source text remain literal
+readable data. Navigation fits the narrow viewport, and print now hides an open ToC.
+The table, quote, lists, repeated notes, missing-image placeholder and math retain their
+intended hierarchy. No clipping or contrast defect was observed in these captures.
+
+The final real-paper sweep inspected all ten title views and rechecked produced HTML
+for page errors, external resource requests, and horizontal overflow. Long inline math
+scrolls within its column; long unsupported source text wraps. Initial fragment links
+wait for math/font layout before landing. These repairs have Chromium/WebKit
+regressions; theme, scroll spy, back-stack, storage debounce/flush, and keyboard focus
+have additional production-rendered acceptance tests. See `docs/MVP_ACCEPTANCE.md`.
