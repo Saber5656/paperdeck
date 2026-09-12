@@ -7,8 +7,9 @@ retries reserve again. Observed usage replaces the reservation after the respons
 
 If a model has no configured price, the estimate and reported actual dollar cost
 are unknown (`null` in the report and IR provenance). The ledger still reserves
-conservative planning amounts at $10/$30 per million input/output tokens and warns
-at two million tokens. These fallback amounts are not provider prices or a reported
+conservative planning amounts at $10/$30 per million input/output tokens, warns
+at two million tokens, and rejects a request that would exceed that token limit
+(including concurrent reservations). These fallback amounts are not provider prices or a reported
 bill. Configure the model's actual rates to apply the monetary budget at those rates;
 configure explicit zero prices for a local model with no per-call charge.
 
