@@ -88,7 +88,37 @@ class PdfEngine:
                 else None
             )
             ledger = Ledger(ctx.settings)
-            llm = LlmClient(ctx.settings, netgate, cache=cache, on_usage=ledger.record)
+            ctx.run_metrics.update(
+                {
+                    "calls": 0,
+                    "cache_hits": 0,
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                    "estimated_usd": estimate.usd,
+                    "actual_usd": 0.0,
+                }
+            )
+
+            def record_usage(
+                purpose: str, model: str, usage: dict[str, Any], cache_hit: bool
+            ) -> None:
+                ledger.record(purpose, model, usage, cache_hit)
+                records = ledger.records
+                ctx.run_metrics.update(
+                    {
+                        "calls": len(records),
+                        "cache_hits": ledger.cache_hits,
+                        "tokens_in": sum(
+                            int(item["usage"].get("prompt_tokens", 0) or 0) for item in records
+                        ),
+                        "tokens_out": sum(
+                            int(item["usage"].get("completion_tokens", 0) or 0) for item in records
+                        ),
+                        "actual_usd": ledger.spent_usd(),
+                    }
+                )
+
+            llm = LlmClient(ctx.settings, netgate, cache=cache, on_usage=record_usage)
             seg = segment(blocks, llm, ledger=ledger)
             equations = process_equations(seg, blocks, pdfdoc, llm, ledger, _Allocator())
             bib_blocks = [
@@ -128,7 +158,7 @@ class PdfEngine:
             ctx.run_metrics.update(
                 {
                     "estimated_usd": estimate.usd,
-                    "actual_cost_usd": ledger.spent_usd(),
+                    "actual_usd": ledger.spent_usd(),
                     "cache_hits": ledger.cache_hits,
                     "calls": len(records),
                 }

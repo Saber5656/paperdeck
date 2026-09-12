@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar, Protocol
 
 if TYPE_CHECKING:
     from paperdeck.config import Settings
@@ -23,7 +23,7 @@ class EngineContext:
     cache: CacheManager
     workdir: Path
     confirm_cost: Callable[[CostEstimate], bool]
-    run_metrics: dict[str, Any] = field(default_factory=dict)
+    run_metrics: dict[str, int | float | None] = field(default_factory=dict)
 
 
 class Engine(Protocol):

@@ -161,7 +161,98 @@ def test_zero_cost_budget_rejects_before_transport() -> None:
     client = LlmClient(config, Gate(handler), on_usage=lambda *args: None)
     with pytest.raises(CostLimitError):
         client.complete(
-            "equation", [{"role": "user", "content": "read"}], PdfEquationLatexV1,
-            max_tokens=20, ledger=Ledger(config)
+            "equation",
+            [{"role": "user", "content": "read"}],
+            PdfEquationLatexV1,
+            max_tokens=20,
+            ledger=Ledger(config),
         )
     assert calls == 0
+
+
+def test_http_retries_are_each_reserved_recorded_and_released(monkeypatch) -> None:
+    from paperdeck.config import load_settings
+    from paperdeck.llm.cost import Ledger
+
+    config = load_settings(None, {"llm.base_url": "http://localhost:11434/v1"})
+    outcomes = [500, 500, 200]
+    usage: list[dict[str, object]] = []
+
+    def handler(request):
+        status = outcomes.pop(0)
+        if status != 200:
+            return httpx.Response(status)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": '{"latex":"x","confidence":0.5}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 2, "completion_tokens": 3},
+            },
+        )
+
+    monkeypatch.setattr("paperdeck.llm.client.time.sleep", lambda _: None)
+    ledger = Ledger(config)
+
+    def record(purpose, model, item, cached):
+        usage.append(item)
+        ledger.record(purpose, model, item, cached)
+
+    client = LlmClient(config, Gate(handler), on_usage=record)
+    result = client.complete(
+        "equation",
+        [{"role": "user", "content": "read"}],
+        PdfEquationLatexV1,
+        max_tokens=20,
+        ledger=ledger,
+    )
+    assert result.latex == "x"
+    assert len(usage) == 3
+    assert ledger.records[0]["usage"]["estimated"] is True
+    assert ledger.token_count() == 47
+    assert ledger._reserved_usd == 0.0
+
+
+def test_timeout_retry_is_recorded_and_reservation_released(monkeypatch) -> None:
+    from paperdeck.config import load_settings
+    from paperdeck.llm.cost import Ledger
+
+    config = load_settings(None, {"llm.base_url": "http://localhost:11434/v1"})
+    attempts = 0
+
+    def handler(request):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ReadTimeout("fixture timeout")
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": '{"latex":"x","confidence":0.5}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 2, "completion_tokens": 3},
+            },
+        )
+
+    monkeypatch.setattr("paperdeck.llm.client.time.sleep", lambda _: None)
+    ledger = Ledger(config)
+    client = LlmClient(config, Gate(handler), on_usage=ledger.record)
+    client.complete(
+        "equation",
+        [{"role": "user", "content": "read"}],
+        PdfEquationLatexV1,
+        max_tokens=20,
+        ledger=ledger,
+    )
+    assert attempts == 2
+    assert len(ledger.records) == 2
+    assert ledger.records[0]["usage"]["estimated"] is True
+    assert ledger._reserved_usd == 0.0
