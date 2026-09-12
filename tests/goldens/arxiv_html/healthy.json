@@ -1,0 +1,54 @@
+{
+  "title": "Synthetic HTML Golden",
+  "authors": [
+    "Ada Lovelace",
+    "Alan Turing"
+  ],
+  "body_types": {
+    "paragraph": 92,
+    "text": 101,
+    "ref_link": 1,
+    "cite": 1,
+    "footnote_ref": 1,
+    "section": 2,
+    "equation": 2,
+    "figure": 1,
+    "table": 1,
+    "cell": 3,
+    "list": 1
+  },
+  "source_ids": [
+    "bib.one",
+    "eq-main",
+    "eq-second",
+    "fig-main",
+    "fn-one",
+    "sec:intro",
+    "sec:methods",
+    "tab-main"
+  ],
+  "labels": [
+    "bib.one",
+    "eq-main",
+    "eq-second",
+    "fig-main",
+    "fn-one",
+    "sec:intro",
+    "sec:methods",
+    "tab-main"
+  ],
+  "equations": [
+    ["1", "a=b"],
+    ["2", "c=d"]
+  ],
+  "figures": [
+    [
+      "1",
+      "asset-858e60a7ba0263165275b671a1e776b22a3ab467",
+      [{"type": "text", "text": "Example plot."}]
+    ]
+  ],
+  "tables": [["1", true, 2]],
+  "bibliography": 1,
+  "footnotes": 1
+}
