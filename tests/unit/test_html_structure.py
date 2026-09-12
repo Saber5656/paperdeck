@@ -69,3 +69,37 @@ def test_structure_handles_missing_assets_nested_tables_quotes_and_code(tmp_path
     assert any(isinstance(item, CodeBlock) and item.text == "code" for item in children)
     assert any(item.code == "figure-image-missing" for item in result.warnings)
     assert any(item.code == "nested-tabular-unhandled" for item in result.warnings)
+
+
+def test_structure_keeps_supported_siblings_and_excludes_frontmatter(tmp_path: Path) -> None:
+    html = """<html><body><div class="ltx_page_main"><article class="ltx_document">
+    <div class="ltx_para"><p class="ltx_p">frontmatter license</p></div>
+    <h1 class="ltx_title ltx_title_document">B<span class="ltx_text ltx_font_bold">E</span>RT</h1>
+    <div class="ltx_authors"><span class="ltx_creator ltx_role_author"><span class="ltx_personname">Ada<span class="ltx_note ltx_role_footnotemark">1</span></span></span></div>
+    <div class="ltx_abstract"><h6 class="ltx_title ltx_title_abstract">Abstract</h6><p class="ltx_p">B<span class="ltx_text ltx_font_bold">E</span>RT is useful.</p></div>
+    <div class="ltx_para"><p class="ltx_p">Intro before sections.</p></div>
+    <section class="ltx_section" id="s"><h2 class="ltx_title"><span class="ltx_tag">1</span> Body</h2><div class="ltx_para"><p class="ltx_p">Main.</p></div></section>
+    <section class="ltx_appendix" id="a"><h2 class="ltx_title"><span class="ltx_tag">A</span> Appendix</h2><div class="ltx_para"><p class="ltx_p">Appendix.</p></div></section>
+    </article></div></body></html>"""
+    result = _parse(tmp_path, html)
+
+    assert result.authors == ["Ada"]
+    assert result.meta_title[0].text == "BERT"
+    assert result.abstract[0].content[0].text == "BERT is useful."
+    assert [item.type for item in result.body] == ["paragraph", "section", "section"]
+    assert result.body[0].content[0].text == "Intro before sections."
+    assert result.body[2].title[0].text == "Appendix"
+
+
+def test_structure_normalizes_figure_and_table_caption_numbers(tmp_path: Path) -> None:
+    html = """<html><body><div class="ltx_page_main"><section class="ltx_section">
+    <figure class="ltx_figure" id="f"><figcaption class="ltx_caption"><span class="ltx_tag ltx_tag_figure">Figure 1: </span>Caption.</figcaption></figure>
+    <figure class="ltx_table" id="t"><figcaption class="ltx_caption"><span class="ltx_tag ltx_tag_table">Table 2: </span>Data.</figcaption><table class="ltx_tabular"><tr><td>x</td></tr></table></figure>
+    </section></div></body></html>"""
+    result = _parse(tmp_path, html)
+    section = result.body[0]
+    figure = next(item for item in section.children if isinstance(item, Figure))
+    table = next(item for item in section.children if isinstance(item, Table))
+
+    assert figure.number == "1"
+    assert table.number == "2"

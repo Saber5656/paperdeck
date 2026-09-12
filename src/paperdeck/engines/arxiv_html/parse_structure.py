@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
 
 from paperdeck.input.arxiv import HtmlArtifact
 from paperdeck.ir.anchors import AnchorAllocator
@@ -52,12 +53,37 @@ def _classes(tag: Tag) -> set[str]:
 
 
 def _text(tag: Tag | None) -> str:
-    return tag.get_text(" ", strip=True) if tag else ""
+    return " ".join(tag.get_text("", strip=False).split()) if tag else ""
+
+
+def _text_without(tag: Tag, excluded_classes: set[str]) -> str:
+    """Flatten text while omitting LaTeXML metadata descendants."""
+
+    parts: list[str] = []
+
+    def visit(node: Tag | NavigableString) -> None:
+        if isinstance(node, NavigableString):
+            parts.append(str(node))
+            return
+        if _classes(node) & excluded_classes:
+            return
+        for child in node.children:
+            if isinstance(child, (Tag, NavigableString)):
+                visit(child)
+
+    visit(tag)
+    return " ".join("".join(parts).split())
 
 
 def _tag_number(tag: Tag) -> str | None:
-    value = _text(tag.select_one(".ltx_tag"))
+    number_tag = tag.select_one(".ltx_tag")
+    value = _text(number_tag)
     value = value.strip("()[]")
+    if number_tag is not None:
+        classes = _classes(number_tag)
+        if "ltx_tag_figure" in classes or "ltx_tag_table" in classes:
+            value = re.sub(r"^(?:Figure|Table)\s+", "", value, flags=re.IGNORECASE)
+            value = value.rstrip(":").strip()
     return value or None
 
 
@@ -163,8 +189,24 @@ def _children(
     container: Tag, alloc: AnchorAllocator, result: StructureResult, limits: Any
 ) -> list[Any]:
     blocks: list[Any] = []
+    document_container = "ltx_document" in _classes(container)
+    after_title = not document_container
     for child in container.find_all(recursive=False):
         classes = _classes(child)
+        if document_container and "ltx_title_document" in classes:
+            after_title = True
+            continue
+        if document_container and not after_title:
+            continue
+        if classes & {
+            "ltx_align_bottom",
+            "ltx_TOC",
+            "ltx_list_toc",
+            "ltx_toc_toc",
+            "ltx_logical-block",
+            "ltx_pagination",
+        }:
+            continue
         if "ltx_title" in classes or "ltx_tag" in classes:
             continue
         if child.name == "section" and classes & {
@@ -176,6 +218,8 @@ def _children(
             blocks.append(_section(child, alloc, result, limits))
         elif "ltx_para" in classes:
             para = child.select_one(":scope > .ltx_p") or child.select_one(".ltx_p") or child
+            if not _text(para):
+                continue
             anchor = _block_id(child, "para", alloc, result)
             result.elements[anchor] = para
             blocks.append(Paragraph(id=anchor, content=[Text(text=_text(para))]))
@@ -242,13 +286,20 @@ def _children(
             "ltx_document_body",
             "ltx_body",
             "ltx_float",
-            "ltx_bibliography",
-            "ltx_authors",
-            "ltx_abstract",
             "ltx_keywords",
-            "ltx_pagination",
         }:
             blocks.extend(_children(child, alloc, result, limits))
+        elif classes & {
+            "ltx_authors",
+            "ltx_abstract",
+            "ltx_bibliography",
+            "ltx_title_document",
+            "ltx_creator",
+            "ltx_author_before",
+            "ltx_author_notes",
+            "ltx_contact",
+        }:
+            continue
         elif any(cls.startswith("ltx_") for cls in classes) and child.name not in {
             "header",
             "footer",
@@ -296,21 +347,23 @@ def parse_structure(
     result = StructureResult([], [], [], [], [], [], {}, {}, {}, [], soup=soup, artifact=artifact)
     title = soup.select_one(".ltx_title_document")
     result.meta_title = [Text(text=_text(title))] if title else []
-    result.authors = [_text(item) for item in soup.select(".ltx_creator .ltx_personname")]
+    result.authors = [
+        _text_without(item, {"ltx_note", "ltx_author_notes"})
+        for item in soup.select(".ltx_creator .ltx_personname")
+    ]
     abstract = soup.select_one(".ltx_abstract")
     if abstract:
-        result.abstract = [Paragraph(id=alloc.next("para"), content=[Text(text=_text(abstract))])]
+        paragraphs = abstract.select(".ltx_p")
+        abstract_text = (
+            " ".join(_text(item) for item in paragraphs) if paragraphs else _text(abstract)
+        )
+        result.abstract = [Paragraph(id=alloc.next("para"), content=[Text(text=abstract_text)])]
     root = soup.select_one(".ltx_page_main") or soup.body or soup
-    sections = root.find_all("section", class_=re.compile(r"ltx_section"), recursive=False)
-    result.body = (
-        _children(root, alloc, result, limits)
-        if not sections
-        else [_section(section, alloc, result, limits) for section in sections]
-    )
+    result.body = _children(root, alloc, result, limits)
     for item in soup.select(".ltx_bibliography .ltx_bibitem"):
         anchor = _block_id(item, "bib", alloc, result)
         result.bibliography.append((anchor, item))
-    for item in soup.select(".ltx_note"):
+    for item in soup.select(".ltx_note:not(.ltx_note_frontmatter):not(.ltx_role_footnotemark)"):
         anchor = _block_id(item, "fn", alloc, result)
         result.footnotes.append((anchor, item))
     return result

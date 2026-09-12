@@ -3,21 +3,29 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from paperdeck.config import load_settings
 from paperdeck.engines.arxiv_html.parse_content import parse_content
 from paperdeck.engines.arxiv_html.parse_structure import parse_structure
 from paperdeck.input.arxiv import HtmlArtifact
 from paperdeck.ir.anchors import AnchorAllocator
 from paperdeck.ir.model import (
     Cite,
+    Document,
     Emph,
     Equation,
     ExtLink,
     FootnoteRef,
     LineBreak,
     Math,
+    Meta,
+    MetaLink,
+    Provenance,
     RefLink,
+    Source,
     Strong,
 )
+from paperdeck.render.html import render
+from paperdeck.render.validate import validate_html
 
 
 def test_content_resolves_math_refs_citations_and_footnotes(tmp_path: Path) -> None:
@@ -104,3 +112,47 @@ def test_content_updates_table_cells_and_equation_group(tmp_path: Path) -> None:
     assert table.rows and table.rows[0][0].header
     equations = [item for item in section.children if isinstance(item, Equation)]
     assert [item.latex for item in equations] == ["a", "b"]
+
+
+def test_equation_alttext_is_kept_as_data_even_when_it_looks_like_script(tmp_path: Path) -> None:
+    payload = r"</script><script>alert(1)</script>"
+    html = (
+        '<html><head><title>P</title></head><body><section class="ltx_section">'
+        '<div class="ltx_equation" id="eq"><span class="ltx_tag">(1)</span>'
+        f'<math alttext="{payload}">ignored</math></div></section></body></html>'
+    )
+    page = tmp_path / "index.html"
+    page.write_text(html)
+    structure = parse_structure(
+        BeautifulSoup(html, "html.parser"),
+        HtmlArtifact(page, {}, [], ""),
+        AnchorAllocator(),
+        None,
+    )
+
+    body, _, _ = parse_content(structure)
+
+    equation = next(item for item in body[0].children if isinstance(item, Equation))
+    assert equation.latex == payload
+
+    document = Document(
+        source=Source(kind="arxiv", arxiv_id="2401.12345", version="1", original="fixture"),
+        provenance=Provenance(
+            engine="arxiv-html", engine_versions={}, created_at="now", fallbacks=[]
+        ),
+        meta=Meta(
+            title=[],
+            authors=[],
+            links=[MetaLink(url="https://arxiv.org/abs/2401.12345", kind="arxiv")],
+        ),
+        body=body,
+        bibliography=[],
+        footnotes=[],
+        assets=structure.assets,
+        labels=structure.labels,
+        warnings=structure.warnings,
+    )
+    rendered = render(document, load_settings(None, {}))
+    assert validate_html(rendered) == []
+    assert "&lt;/script&gt;" in rendered
+    assert "</script><script>alert(1)</script>" not in rendered
