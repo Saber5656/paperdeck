@@ -116,10 +116,18 @@ def _expand_numbers(raw: str) -> list[int]:
 
 
 def _non_overlapping(items: list[Splice]) -> list[Splice]:
-    return sorted(
+    ordered = sorted(
         (item for item in items if item.end > item.start),
         key=lambda item: (item.start, -(item.end - item.start)),
     )
+    result: list[Splice] = []
+    end = -1
+    for item in ordered:
+        if item.start < end:
+            continue
+        result.append(item)
+        end = item.end
+    return result
 
 
 def link_citations(
