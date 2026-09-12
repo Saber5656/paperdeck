@@ -4,17 +4,12 @@
 
 paperdeck turns scholarly PDFs, LaTeX projects, and arXiv papers into self-contained HTML reading decks. The result keeps section navigation, reference jumps, equation previews, a table of contents, keyboard controls, and a browser reader that works offline.
 
-> **Demo media:** an animated demo GIF will be added after the v1 reader sweep.
+![Offline reader showing a converted LaTeX paper](docs/qa/reader-light.jpg)
 
 ## Install
 
-```sh
-uv tool install paperdeck
-# or
-pipx install paperdeck
-```
-
-The LaTeX engine uses Pandoc. Install it with the package manager for your system:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Pandoc
+before running the source checkout. Pandoc is required for the LaTeX example:
 
 ```sh
 # macOS
@@ -24,6 +19,18 @@ sudo apt-get install pandoc
 # Fedora
 sudo dnf install pandoc
 ```
+
+```sh
+git clone https://github.com/Saber5656/paperdeck.git
+cd paperdeck
+uv sync --locked
+uv run paperdeck doctor --offline
+uv run paperdeck convert examples/reading-demo.tex --offline --output reading-demo.html
+```
+
+The MVP is available from source. A stable package has not yet been published to
+PyPI. To install the current checkout as a command, use `uv tool install .` or
+`pipx install .`; otherwise prefix commands below with `uv run`.
 
 Set an LLM provider for the PDF engine. The engine sends extracted paper text and cropped equation images only when it needs structure, bibliography, citation, or equation transcription help.
 
@@ -41,6 +48,14 @@ vlm_model = "llava"
 api_key_env = "OLLAMA_API_KEY"
 cache = true
 max_cost_usd = 0.0
+
+[llm.pricing."llama3.2"]
+input_per_mtok = 0.0
+output_per_mtok = 0.0
+
+[llm.pricing."llava"]
+input_per_mtok = 0.0
+output_per_mtok = 0.0
 ```
 
 ## Quickstart
@@ -57,13 +72,13 @@ Each command writes one self-contained HTML file. Use `paperdeck doctor --json` 
 
 | Feature | How to use |
 | --- | --- |
-| Section jumps | Click the table of contents or press `g` then `s` |
-| Figure/table previews | Select the caption or use the linked reference |
-| Equation previews | Hover an equation image; unverified PDF transcriptions stay marked |
-| Table of contents | Press `t` to focus it |
-| Themes | Press `d` to switch light/dark mode |
+| Section jumps | Click the table of contents or press `j`/`k` |
+| Figure/table previews | Hover or keyboard-focus an internal reference |
+| Equation previews | Hover or focus an equation reference; PDF transcriptions stay marked unverified |
+| Table of contents | Press `t` to show or hide it |
+| Themes | Press `d` to cycle automatic, light and dark mode |
 | Reading position | The reader restores the last position in local browser storage |
-| Keyboard navigation | `j`/`k` move between sections, `/` focuses search, `?` shows keys |
+| Keyboard navigation | `j`/`k` move between sections, `Backspace` returns from a jump, `?` shows keys |
 
 ## Engines
 
@@ -71,9 +86,9 @@ Each command writes one self-contained HTML file. Use `paperdeck doctor --json` 
 | --- | --- | --- |
 | arXiv ID | arXiv HTML when available; LaTeX source fallback | Network fetch; `--offline` uses cache |
 | `.tex` or source archive | LaTeX/Pandoc engine, highest semantic fidelity | Local and offline after dependencies are installed |
-| `.pdf` | PDF text layout plus deterministic crops; best-effort semantic recovery | LLM usage may cost money; configure `max_cost_usd`; `--offline` requires cached LLM replies |
+| `.pdf` | PDF text layout plus deterministic crops; best-effort semantic recovery | Requires a configured model endpoint; caches responses; PDF conversion is unavailable with `--offline` |
 
-Select explicitly with `--engine latex`, `--engine pdf`, or `--engine arxiv-html` when the input supports more than one path. A declined estimate or an exhausted budget preserves image equations and records a warning rather than inventing LaTeX.
+Select explicitly with `--engine latex`, `--engine pdf`, or `--engine arxiv-html` when the input supports more than one path. PDF conversion asks for estimated-cost confirmation (`--yes` for scripts). Declining stops conversion. Every physical model request is budget-checked, including retries. Low-confidence equation transcriptions retain the source image and a warning.
 
 ## Limitations
 
@@ -85,4 +100,4 @@ Generated HTML contains vendored assets and makes zero external requests. The PD
 
 ## 日本語
 
-paperdeck は、論文 PDF・LaTeX・arXiv の文書を、参照ジャンプや数式プレビューを備えた自己完結型の HTML 読書デッキへ変換します。`uv tool install paperdeck` または `pipx install paperdeck` で導入し、LaTeX 入力には Pandoc を OS のパッケージマネージャーから追加してください。PDF エンジンだけは、構造判定・参考文献・引用・数式転記のために、設定した LLM へ本文や数式画像を送ることがあります。生成物はオフラインで動作し、未検証の数式転記は画像を正とします。詳しい仕様・制約は [`docs/DESIGN.md`](docs/DESIGN.md)、安全な利用方法は [`SECURITY.md`](SECURITY.md) を参照してください。
+paperdeck は、論文 PDF・LaTeX・arXiv を、参照ジャンプや数式プレビューを備えた単一の HTML へ変換します。MVP は上記のソース導入手順で利用できます。PyPI への安定版公開は未実施です。LaTeX 入力には Pandoc が必要です。PDF 変換は設定した LLM へ本文や数式画像を送り、実行前に概算費用を確認します。生成された HTML はオフラインで読めます。PDF 変換そのものの `--offline` 実行は未対応です。詳しい仕様・制約は [`docs/DESIGN.md`](docs/DESIGN.md)、安全な利用方法は [`SECURITY.md`](SECURITY.md) を参照してください。
