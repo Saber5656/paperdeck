@@ -22,7 +22,7 @@ Update a golden only when the output change is intentional:
 
 ```sh
 uv run pytest --update-goldens
-git diff -- tests/fixtures
+git diff -- tests/goldens
 ```
 
 Review the generated HTML, IR, warnings, citations, equation assets, and self-containment report before committing the fixture. Before a release, copy and complete this 10-paper sweep:
@@ -43,11 +43,11 @@ Notes, source versions, warnings, and output links:
 
 ## Dependencies and security
 
-Runtime dependencies must use permissive licenses: MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, Python-2.0, or PSF-2.0. Dual-licensed packages are acceptable when one license is on that list. Do not add AGPL or other copyleft runtime dependencies, and do not add Pillow; the PDF engine encodes PNG crops without it. New dependencies require an ADR under [`docs/decisions/`](docs/decisions/) describing license, runtime need, alternatives, and package-data impact.
+Runtime dependencies normally use permissive licenses: MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, Python-2.0, or PSF-2.0. An OR expression permits choosing an allowed license; all AND terms must pass. Existing certifi and PDFium license decisions are recorded in [`docs/DEPENDENCY_LICENSES.md`](docs/DEPENDENCY_LICENSES.md). Do not add AGPL or unreviewed copyleft dependencies, and do not add Pillow at runtime; the PDF engine encodes PNG crops without it. New dependencies require an ADR under [`docs/decisions/`](docs/decisions/) describing license, runtime need, alternatives, and package-data impact.
 
 ## Commits and pull requests
 
-Use focused commits with Conventional Commit prefixes. Keep one issue per pull request and use `[W<n>] <NN> concise description` as the title. Include tests, fixture review, security impact, and any manual-sweep evidence in the pull request. CI gates must be green before review.
+Use focused commits with Conventional Commit prefixes. Group dependent issues into a reviewable feature when integration requires it, and retain individual issue acceptance evidence. Include tests, fixture review, security impact, and any manual-sweep evidence in the pull request. CI gates must be green before merge.
 
 ## Releasing
 
