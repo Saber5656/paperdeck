@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light" data-theme-mode="auto">
 <head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;; script-src &#39;sha256-c1Yj//4IpjxoJhUU9+TBfMQNzUKZiiL3mIPEZQfwA5c=&#39; &#39;sha256-juMWlTCF7jOEJtxi9z0kOPPzwJP/RW581KQdtswo4Mg=&#39; &#39;sha256-EKkbR5zZJ0Rs62BAn7DXK10NBer0RsnlL6/WQFjIRUA=&#39; &#39;sha256-pjMfQXQ+kDsc1Pshp4Smt0S8tbFoYWT7CLoAzLZQf5I=&#39;; font-src data:; connect-src &#39;none&#39;; form-action &#39;none&#39;; base-uri &#39;none&#39;; frame-ancestors &#39;none&#39;">
+<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;; script-src &#39;sha256-c1Yj//4IpjxoJhUU9+TBfMQNzUKZiiL3mIPEZQfwA5c=&#39; &#39;sha256-juMWlTCF7jOEJtxi9z0kOPPzwJP/RW581KQdtswo4Mg=&#39; &#39;sha256-EKkbR5zZJ0Rs62BAn7DXK10NBer0RsnlL6/WQFjIRUA=&#39; &#39;sha256-pB0sqpBqXQB4M+QPjgpwc2fB05tvF/rk4oKiZGYNQtw=&#39;; font-src data:; connect-src &#39;none&#39;; form-action &#39;none&#39;; base-uri &#39;none&#39;; frame-ancestors &#39;none&#39;">
 <title>Equation Golden</title>
 <script>(function () {
   let mode = 'auto'; try { mode = localStorage.getItem('pd-theme') || 'auto'; } catch (_) {}
@@ -142,7 +142,7 @@ th { font-weight: 600; }
 }
 @media print {
   html, html[data-theme], body { background: var(--print-bg); color: var(--print-fg); }
-  #pd-header, #pd-toc, #pd-back, #pd-toast, #pd-help, #pd-popup, #pd-toc-backdrop, .pd-copy-latex { display: none; }
+  #pd-header, #pd-toc, .pd-toc-open #pd-toc, #pd-back, #pd-toast, #pd-help, #pd-popup, #pd-toc-backdrop, .pd-copy-latex { display: none; }
   #pd-content { max-width: none; width: 100%; padding: 0; margin: 0; }
   .pd-toc-open #pd-main-wrap { margin-left: 0; }
   .pd-eq, figure, li { break-inside: avoid; }
@@ -262,7 +262,13 @@ th { font-weight: 600; }
         event.preventDefault(); go(link.hash.slice(1));
       });
       pd.jump = {go, back};
-      if (location.hash) requestAnimationFrame(() => requestAnimationFrame(() => go(decodeURIComponent(location.hash.slice(1)), false)));
+      if (location.hash) {
+        // A fragment opens below the initial viewport. Finish math and font layout
+        // before measuring its destination so lazy rendering cannot move the anchor.
+        pd.math.renderInto(pd.qs('#pd-content') || document.body);
+        const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
+        fontsReady.then(() => requestAnimationFrame(() => requestAnimationFrame(() => go(decodeURIComponent(location.hash.slice(1)), false))));
+      }
     })();
     // ---- feature: toc ----
     (() => {
