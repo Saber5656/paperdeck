@@ -159,8 +159,17 @@ def segment(blocks: list[RawBlock], llm: Any, ledger: Any = None) -> SegmentResu
             if entry.role == "heading":
                 heading_ids.append((entry.id, entry.level or 1))
         order.extend([entry for entry in response.section_order if entry in input_ids])
-    # Canonical deterministic reading order wins if a model omits section_order.
-    order = [block.id for block in blocks if block.id in roles]
+    # Keep the validated model order. If a provider omits some IDs from its
+    # section_order, append those classified blocks in geometric order so no
+    # content disappears from the assembled document.
+    ordered_seen: set[str] = set()
+    model_order = order
+    order = []
+    for block_id in model_order:
+        if block_id in roles and block_id not in ordered_seen:
+            order.append(block_id)
+            ordered_seen.add(block_id)
+    order.extend(block.id for block in blocks if block.id in roles and block.id not in ordered_seen)
     seen_title = 0
     seen_abstract = 0
     for block in blocks:

@@ -156,6 +156,15 @@ class PdfDoc:
     def page_count(self) -> int:
         return len(self._document)
 
+    @property
+    def metadata_title(self) -> str:
+        """Return the embedded PDF title when the document exposes one."""
+        try:
+            value = self._document.get_metadata_value("Title")
+        except (AttributeError, TypeError, ValueError):
+            return ""
+        return str(value or "").strip()
+
     def page_size(self, page_i: int) -> tuple[float, float]:
         page = self._document.get_page(page_i)
         try:

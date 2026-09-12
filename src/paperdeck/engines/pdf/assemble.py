@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from .blocks import RawBlock
@@ -82,8 +83,14 @@ def assemble_pdf(
         for block in blocks
         if seg.roles.get(block.id) and seg.roles[block.id].role == "paragraph"
     ]
-    paragraph_texts = [block.text for block in paragraph_blocks]
-    paragraph_sources = {block.id: block.text for block in paragraph_blocks}
+    merged_paragraphs = list(getattr(seg, "paragraphs", []))
+    if not merged_paragraphs:
+        merged_paragraphs = [(block.id, block.text, [block.id]) for block in paragraph_blocks]
+    paragraph_texts = [str(item[1]) for item in merged_paragraphs]
+    paragraph_sources = {str(item[0]): str(item[1]) for item in merged_paragraphs}
+    paragraph_by_source = {
+        str(source_id): str(item[0]) for item in merged_paragraphs for source_id in item[2]
+    }
     cite_splices = link_citations(paragraph_texts, bibliography, llm, ledger)
     numbers_map: dict[tuple[str, str], str] = {}
     for _block_id, draft in eq_result.equations.items():
@@ -114,7 +121,14 @@ def assemble_pdf(
         else:
             body.append(node)
 
-    for block in blocks:
+    block_by_id = {block.id: block for block in blocks}
+    ordered_blocks = [
+        block_by_id[block_id] for block_id in seg.order if block_id in block_by_id
+    ]
+    ordered_ids = {item.id for item in ordered_blocks}
+    ordered_blocks.extend(block for block in blocks if block.id not in ordered_ids)
+    merged_ids = {str(item[0]) for item in merged_paragraphs}
+    for block in ordered_blocks:
         info = seg.roles.get(block.id)
         if info is None or info.role in {"noise", "bib_entry", "author_line", "title", "abstract"}:
             continue
@@ -138,10 +152,19 @@ def assemble_pdf(
             )
             numbers_map[("sec", number)] = sid
         elif info.role == "paragraph":
+            paragraph_id = paragraph_by_source.get(block.id, block.id)
+            if paragraph_id not in merged_ids:
+                continue
+            merged_ids.remove(paragraph_id)
             pid = f"para-{para_idx + 1}"
-            paragraph_sources[pid] = block.text
+            paragraph_sources[pid] = paragraph_sources[paragraph_id]
             paragraph_index_by_id[pid] = para_idx
-            add_node(Paragraph(id=pid, content=apply_splices(block.text, all_splices[para_idx])))
+            add_node(
+                Paragraph(
+                    id=pid,
+                    content=apply_splices(paragraph_sources[pid], all_splices[para_idx]),
+                )
+            )
             para_idx += 1
         elif info.role == "display_equation" and block.id in eq_result.equations:
             draft = eq_result.equations[block.id]
@@ -172,7 +195,16 @@ def assemble_pdf(
         elif info.role == "table_caption":
             table_idx += 1
             tid = f"tab-{table_idx}"
-            asset_id = _crop_region(pdfdoc, block, blocks, eq_result, settings, "table", tid)
+            asset_id = _crop_region(
+                pdfdoc,
+                block,
+                blocks,
+                eq_result,
+                settings,
+                "table",
+                tid,
+                linked_id=info.links_to_block,
+            )
             add_node(
                 Table(
                     id=tid,
@@ -189,7 +221,6 @@ def assemble_pdf(
         **{block.id: i for i, block in enumerate(paragraph_blocks)},
         **paragraph_index_by_id,
     }
-
     def resolve_nodes(nodes: list[Any]) -> list[Any]:
         resolved: list[Any] = []
         for item in nodes:
@@ -222,8 +253,10 @@ def assemble_pdf(
         if seg.roles.get(block.id) and seg.roles[block.id].role == "title"
     ]
     title = titles[0] if titles else str(getattr(pdfdoc, "metadata_title", ""))
+    title_warning: str | None = None
     if not title:
-        title = "PDF document"
+        title = Path(str(getattr(pdfdoc, "path", "paper.pdf"))).stem or "PDF document"
+        title_warning = "pdf-title-fallback"
     authors: list[str] = []
     for block in blocks:
         if seg.roles.get(block.id) and seg.roles[block.id].role == "author_line":
@@ -251,6 +284,9 @@ def assemble_pdf(
         + list(getattr(eq_result, "warnings", []))
         + bib_warnings
     ]
+    if title_warning:
+        warnings.append(_warning(title_warning))
+    warnings.extend(_warning(item) for block in blocks for item in block.warnings)
     return Document(
         source=source_obj,
         provenance=prov,
@@ -279,12 +315,42 @@ def _crop_region(
     settings: Any,
     kind: str,
     anchor: str,
+    *,
+    linked_id: str | None = None,
 ) -> str | None:
     page_blocks = [item for item in blocks if item.page == caption.page and item.id != caption.id]
-    page_width, page_height = pdfdoc.page_size(caption.page)
-    above = [item for item in page_blocks if item.bbox[3] <= caption.bbox[1]]
-    bottom = max((item.bbox[3] for item in above), default=0.0)
-    bbox = (0.0, bottom, page_width, caption.bbox[1])
+    page_width, _page_height = pdfdoc.page_size(caption.page)
+    linked = [item for item in page_blocks if item.id == linked_id]
+    if linked:
+        bbox = (
+            min(item.bbox[0] for item in linked),
+            min(item.bbox[1] for item in linked),
+            max(item.bbox[2] for item in linked),
+            max(item.bbox[3] for item in linked),
+        )
+    else:
+        def vertical(item: RawBlock) -> float:
+            return min(item.bbox[3], caption.bbox[3]) - max(
+                item.bbox[1], caption.bbox[1]
+            )
+        beside = [
+            item
+            for item in page_blocks
+            if vertical(item) > 0
+            and (item.bbox[2] <= caption.bbox[0] or item.bbox[0] >= caption.bbox[2])
+        ]
+        above = [item for item in page_blocks if item.bbox[1] >= caption.bbox[3]]
+        candidates = beside or above
+        if candidates:
+            chosen = max(
+                candidates,
+                key=lambda item: (item.bbox[2] - item.bbox[0]) * (item.bbox[3] - item.bbox[1]),
+            )
+            bbox = chosen.bbox
+        else:
+            # No extracted block can safely identify an image region. Return a
+            # placeholder through the existing minimum-size warning path.
+            bbox = (0.0, 0.0, 0.0, 0.0)
     if bbox[2] - bbox[0] < 40 or bbox[3] - bbox[1] < 40:
         result.warnings.append(f"pdf-figure-region-missing:{caption.id}")
         asset_id = f"asset-{kind}-{anchor}"
