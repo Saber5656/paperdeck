@@ -1043,9 +1043,16 @@
           "type": "integer"
         },
         "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": 0.0,
-          "title": "Cost Usd",
-          "type": "number"
+          "title": "Cost Usd"
         },
         "model": {
           "title": "Model",

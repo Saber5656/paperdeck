@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from ..errors import CostLimitError
 
 _UNKNOWN_INPUT_PER_MTOK = 10.0
 _UNKNOWN_OUTPUT_PER_MTOK = 30.0
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -48,15 +50,25 @@ def estimate_pdf_run(
     tokens_out = sum(min(seg_in // seg_calls if seg_calls else 0, 4096) for _ in range(seg_calls))
     tokens_out += equations * 1024 + bib_calls * min(max(500, chars // 20), 4096)
     model = settings.llm.model
+    vision_model = getattr(settings.llm, "vlm_model", model)
     price = _pricing(settings)
+    vision_price = _pricing(settings, vision_model) if equations else price
     assumptions = ["rough estimate; actual token use may vary by ±50%"]
-    if price is None:
+    if price is None or vision_price is None:
         usd = None
+        missing = model if price is None else vision_model
         assumptions.append(
-            f"no pricing configured for {model}; budget enforcement switches to token count"
+            f"no pricing configured for {missing}; actual dollars are unknown; "
+            "budget reserves use $10/$30 per million input/output tokens; warn at 2,000,000 tokens"
         )
     else:
-        usd = tokens_in * price[0] / 1_000_000 + tokens_out * price[1] / 1_000_000
+        vision_out = equations * 1024
+        usd = (
+            (tokens_in - vlm_in) * price[0]
+            + (tokens_out - vision_out) * price[1]
+            + vlm_in * vision_price[0]
+            + vision_out * vision_price[1]
+        ) / 1_000_000
     return CostEstimate(calls, tokens_in, tokens_out, usd, assumptions, model)
 
 
@@ -74,6 +86,8 @@ class Ledger:
         self._reserved_usd = 0.0
         self._reserved_tokens = 0
         self.cache_hits = 0
+        self._unknown_cost = False
+        self._unknown_warning_sent = False
 
     @property
     def records(self) -> list[dict[str, Any]]:
@@ -89,11 +103,18 @@ class Ledger:
                 self.cache_hits += 1
             self._tokens_in += pin
             self._tokens_out += pout
-            price = _pricing(self.settings, model) or (
-                _UNKNOWN_INPUT_PER_MTOK,
-                _UNKNOWN_OUTPUT_PER_MTOK,
-            )
+            price = _pricing(self.settings, model)
+            if price is None and not cache_hit:
+                self._unknown_cost = True
+            price = price or (_UNKNOWN_INPUT_PER_MTOK, _UNKNOWN_OUTPUT_PER_MTOK)
             self._spent += pin * price[0] / 1_000_000 + pout * price[1] / 1_000_000
+            if (
+                self._unknown_cost
+                and self._tokens_in + self._tokens_out >= 2_000_000
+                and not self._unknown_warning_sent
+            ):
+                log.warning("Unknown model pricing: usage reached 2,000,000 tokens")
+                self._unknown_warning_sent = True
             self._records.append(
                 {
                     "purpose": purpose,
@@ -104,9 +125,9 @@ class Ledger:
                 }
             )
 
-    def spent_usd(self) -> float:
+    def spent_usd(self) -> float | None:
         with self._lock:
-            return self._spent
+            return None if self._unknown_cost else self._spent
 
     def token_count(self) -> int:
         with self._lock:
@@ -158,7 +179,12 @@ class Ledger:
 
     def call_estimate(self, purpose: str = "equation") -> float:
         """Estimate one call in USD for degradation checks."""
-        price = _pricing(self.settings, self.model) or (
+        model = (
+            getattr(self.settings.llm, "vlm_model", self.model)
+            if purpose == "equation"
+            else self.model
+        )
+        price = _pricing(self.settings, model) or (
             _UNKNOWN_INPUT_PER_MTOK,
             _UNKNOWN_OUTPUT_PER_MTOK,
         )
@@ -170,9 +196,17 @@ class Ledger:
 def format_estimate(est: CostEstimate) -> str:
     amount = f"~${est.usd:.2f}" if est.usd is not None else "unknown (no pricing configured)"
     model = est.model or "configured model"
+
+    def tokens(count: int) -> str:
+        if count >= 1_000_000:
+            return f"{count / 1_000_000:g}M"
+        if count >= 1_000:
+            return f"{count / 1_000:g}k"
+        return str(count)
+
     lines = [
-        f"LLM cost estimate: {amount} ({est.calls} calls, ~{est.tokens_in:,} in / "
-        f"~{est.tokens_out:,} out tokens, model {model})"
+        f"LLM cost estimate: {amount} ({est.calls} calls, ~{tokens(est.tokens_in)} in / "
+        f"~{tokens(est.tokens_out)} out tokens, model {model})"
     ]
     lines.extend(est.assumptions)
     lines.append("Proceed? [y/N]")
