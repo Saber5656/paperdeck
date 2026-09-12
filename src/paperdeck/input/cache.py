@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,8 +79,8 @@ class CacheManager:
             )
         path = self.root / Path(path_key)
         try:
-            path.relative_to(self.root)
-        except ValueError:
+            path.resolve(strict=False).relative_to(self.root.resolve(strict=False))
+        except (OSError, RuntimeError, ValueError):
             raise SecurityError(
                 "Invalid cache path",
                 "use a relative cache path without parent segments",
@@ -92,14 +93,30 @@ class CacheManager:
         self._ensure_root()
         destination.parent.mkdir(parents=True, exist_ok=True)
         is_llm = path_key.startswith("llm/")
+        directory_root = self.root / ("llm" if is_llm else "arxiv")
         if is_llm:
-            self._chmod(self.root / "llm", 0o700)
-            self._chmod(destination.parent, 0o700)
+            directory_mode = 0o700
         else:
-            self._chmod(self.root / "arxiv", 0o755)
-            self._chmod(destination.parent, 0o755)
-        temporary = destination.with_name(destination.name + ".tmp")
-        fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            directory_mode = 0o755
+        current = destination.parent
+        while True:
+            self._chmod(current, directory_mode)
+            if current == directory_root:
+                break
+            current = current.parent
+        # Older versions used a fixed ``.tmp`` name, so a process killed after
+        # writing can leave it behind.  Remove only that legacy name; current
+        # writers use unique names and therefore never remove another active
+        # writer's temporary file.
+        legacy_temporary = destination.with_name(destination.name + ".tmp")
+        try:
+            legacy_temporary.unlink()
+        except FileNotFoundError:
+            pass
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=destination.name + ".tmp.", dir=str(destination.parent)
+        )
+        temporary = Path(temporary_name)
         try:
             with os.fdopen(fd, "wb") as output:
                 if isinstance(source, bytes):
@@ -215,13 +232,18 @@ class CacheManager:
                 else:
                     child.unlink()
             return
-        ident = self._id_part(arxiv_id)
-        if not ident or "\x00" in ident or "/" in ident or ident in {".", ".."}:
+        if (
+            not arxiv_id
+            or "\x00" in arxiv_id
+            or Path(arxiv_id).is_absolute()
+            or ".." in Path(arxiv_id).parts
+        ):
             raise SecurityError(
                 "Invalid arXiv cache identifier",
                 "use a valid arXiv identifier",
                 "cache-key-invalid",
             )
+        ident = self._id_part(arxiv_id)
         target = self.root / "arxiv" / ident
         target.relative_to(self.root / "arxiv")
         if target.is_dir():
