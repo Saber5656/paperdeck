@@ -1,0 +1,1 @@
+"""Consolidated security acceptance tests."""
