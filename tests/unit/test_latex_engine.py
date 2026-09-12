@@ -6,8 +6,9 @@ import pytest
 
 from paperdeck.config import load_settings
 from paperdeck.engines import EngineContext
-from paperdeck.engines.latex.engine import LatexEngine
+from paperdeck.engines.latex.engine import LatexEngine, _acquire_source
 from paperdeck.errors import ConversionError
+from paperdeck.input.arxiv import ArxivMeta
 from paperdeck.input.cache import CacheManager
 from paperdeck.input.resolver import InputSpec
 
@@ -136,3 +137,83 @@ def test_latex_engine_rejects_pdf_only_arxiv(
     with pytest.raises(ConversionError) as exc:
         LatexEngine().convert(context)
     assert getattr(exc.value, "code", None) == "eprint-is-pdf-only"
+
+
+def test_latex_engine_available_checks_pandoc_and_arxiv_kind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("paperdeck.engines.latex.engine.pandoc_version", lambda: (3, 11))
+    settings = load_settings(None, {})
+    arxiv = EngineContext(
+        spec=InputSpec("arxiv", arxiv_id="2401.12345", original="2401.12345"),
+        settings=settings,
+        cache=CacheManager(tmp_path / "cache"),
+        workdir=tmp_path,
+        confirm_cost=lambda _estimate: True,
+    )
+    missing = EngineContext(
+        spec=InputSpec("latex-local", original="missing"),
+        settings=settings,
+        cache=CacheManager(tmp_path / "cache"),
+        workdir=tmp_path,
+        confirm_cost=lambda _estimate: True,
+    )
+    engine = LatexEngine()
+    assert engine.available(arxiv) == (True, "available")
+    assert engine.available(missing) == (False, "eprint-is-pdf-only")
+    monkeypatch.setattr("paperdeck.engines.latex.engine.pandoc_version", lambda: None)
+    assert engine.available(arxiv) == (False, "pandoc-missing")
+
+
+def test_latex_engine_acquisition_rejects_missing_inputs(tmp_path: Path) -> None:
+    settings = load_settings(None, {})
+    context = EngineContext(
+        spec=InputSpec("latex-local", original="missing"),
+        settings=settings,
+        cache=CacheManager(tmp_path / "cache"),
+        workdir=tmp_path,
+        confirm_cost=lambda _estimate: True,
+    )
+    with pytest.raises(ConversionError, match="source path") as exc:
+        _acquire_source(context, tmp_path / "staging")
+    assert exc.value.code == "source-missing"
+
+
+@pytest.mark.skipif(__import__("shutil").which("pandoc") is None, reason="Pandoc is required")
+def test_latex_engine_preserves_arxiv_metadata_links(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import paperdeck.engines.latex.engine as engine_module
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "main.tex").write_text(
+        "\\documentclass{article}\n\\begin{document}\nCached.\n\\end{document}\n",
+        encoding="utf-8",
+    )
+    metadata = ArxivMeta(
+        id="2401.12345",
+        latest_version=1,
+        resolved_version=1,
+        title="Cached title",
+        authors=["Cached Author"],
+        abstract="Cached abstract",
+        updated="2024-01-01T00:00:00Z",
+        abs_url="https://arxiv.org/abs/2401.12345v1",
+        doi="10.1234/cached",
+        categories=["cs.CL"],
+    )
+    monkeypatch.setattr(engine_module, "_acquire_source", lambda _ctx, _staging: (source, metadata))
+    settings = load_settings(None, {})
+    context = EngineContext(
+        spec=InputSpec("arxiv", arxiv_id="2401.12345", original="2401.12345"),
+        settings=settings,
+        cache=CacheManager(tmp_path / "cache"),
+        workdir=tmp_path,
+        confirm_cost=lambda _estimate: True,
+    )
+    document = LatexEngine().convert(context)
+    assert [(link.kind, link.url) for link in document.meta.links] == [
+        ("arxiv", "https://arxiv.org/abs/2401.12345v1"),
+        ("doi", "https://doi.org/10.1234/cached"),
+    ]

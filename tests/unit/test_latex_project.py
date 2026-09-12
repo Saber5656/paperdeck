@@ -45,3 +45,35 @@ def test_include_escape_and_cycle_fail(tmp_path: Path) -> None:
     (tmp_path / "a.tex").write_text("\\input{main}\n", encoding="utf-8")
     with pytest.raises(ConversionError, match="cycle"):
         prepare(main)
+
+
+def test_prepare_selection_missing_include_and_latin1_fallback(tmp_path: Path) -> None:
+    (tmp_path / "paper.tex").write_text(
+        "\\documentclass{x}\n\\begin{document}\n\\input{missing}\n\\end{document}",
+        encoding="utf-8",
+    )
+    (tmp_path / "other.tex").write_text("not a main", encoding="utf-8")
+    project = prepare(tmp_path)
+    assert project.main.name == "paper.tex"
+    assert "missing" in project.flattened.read_text()
+    assert any(item.code == "missing-include" for item in project.warnings)
+
+    latin = tmp_path / "latin.tex"
+    latin.write_bytes(b"\\documentclass{x}\n\\begin{document}\n\x96\n\\end{document}")
+    latin_project = prepare(latin)
+    assert any(item.code == "source-encoding-fallback" for item in latin_project.warnings)
+
+
+def test_prepare_ambiguous_main_warns_and_missing_document_fails(tmp_path: Path) -> None:
+    for name in ("one.tex", "two.tex"):
+        (tmp_path / name).write_text(
+            "\\documentclass{x}\n\\begin{document}\nX\n\\end{document}", encoding="utf-8"
+        )
+    project = prepare(tmp_path)
+    assert project.main.name in {"one.tex", "two.tex"}
+    assert any(item.code == "main-tex-ambiguous" for item in project.warnings)
+    bad = tmp_path / "bad.tex"
+    bad.write_text("\\documentclass{x}", encoding="utf-8")
+    with pytest.raises(ConversionError) as error:
+        prepare(bad)
+    assert error.value.code == "no-begin-document"
