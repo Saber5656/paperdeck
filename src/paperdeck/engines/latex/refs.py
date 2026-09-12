@@ -366,6 +366,9 @@ def resolve_references(doc: Any, labels: dict[str, str], bib_index: dict[str, An
         Figure,
         Paragraph,
         Section,
+        Strong,
+        Sub,
+        Sup,
         Table,
         Text,
         Warning,
@@ -398,7 +401,7 @@ def resolve_references(doc: Any, labels: dict[str, str], bib_index: dict[str, An
                         span_map[value.text], labels, targets, bib_index, doc.footnotes, warnings
                     )
                 )
-            elif isinstance(value, (Emph, ExtLink)):
+            elif isinstance(value, (Emph, ExtLink, Strong, Sub, Sup)):
                 output.append(value.model_copy(update={"content": inline_list(value.content)}))
             elif isinstance(value, Cite):
                 ids: list[str] = []

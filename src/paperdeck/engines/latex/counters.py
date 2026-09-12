@@ -48,6 +48,8 @@ def _split_rows(text: str) -> list[str]:
 def _body(latex: str, env: str) -> str:
     value = re.sub(rf"^\s*\\begin\{{{re.escape(env)}\*?\}}", "", latex)
     value = re.sub(rf"\\end\{{{re.escape(env)}\*?\}}\s*$", "", value)
+    if env in {"align", "gather", "eqnarray", "multline", "flalign", "alignat"}:
+        value = re.sub(r"^\s*\\begin\{aligned\}(.*?)\\end\{aligned\}\s*$", r"\1", value, flags=re.S)
     return value.strip()
 
 

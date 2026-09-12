@@ -263,7 +263,12 @@ def _inlines(
     return result
 
 
-def _map_blocks(nodes: list[Any], alloc: AnchorAllocator, mapped: MappedDoc) -> list[Block]:
+def _map_blocks(
+    nodes: list[Any],
+    alloc: AnchorAllocator,
+    mapped: MappedDoc,
+    display_envs: list[str] | None = None,
+) -> list[Block]:
     result: list[Block] = []
     for node in nodes:
         if not isinstance(node, dict):
@@ -363,7 +368,10 @@ def _map_blocks(nodes: list[Any], alloc: AnchorAllocator, mapped: MappedDoc) -> 
                     eq_id = alloc.next("eq")
                     latex = str(inline["c"][1])
                     env_match = re.search(r"\\begin\{([^}]+)\}", latex)
-                    env = env_match.group(1) if env_match else "display"
+                    source_env = display_envs.pop(0) if display_envs else None
+                    env = env_match.group(1) if env_match else (source_env or "display")
+                    if env == "aligned" and source_env and source_env != "display":
+                        env = source_env
                     mapped.env_map[eq_id] = env
                     result.append(
                         Equation(id=eq_id, content_kind="latex", latex=latex, latex_verified=True)
@@ -398,7 +406,10 @@ def _map_blocks(nodes: list[Any], alloc: AnchorAllocator, mapped: MappedDoc) -> 
             result.append(CodeBlock(id=alloc.next("para"), text=str(text), language=lang))
         elif typ == "BlockQuote":
             result.append(
-                Quote(id=alloc.next("para"), content=_map_blocks(content or [], alloc, mapped))
+                Quote(
+                    id=alloc.next("para"),
+                    content=_map_blocks(content or [], alloc, mapped, display_envs),
+                )
             )
         elif typ in {"BulletList", "OrderedList"}:
             items = (
@@ -410,7 +421,9 @@ def _map_blocks(nodes: list[Any], alloc: AnchorAllocator, mapped: MappedDoc) -> 
                 ListBlock(
                     id=alloc.next("para"),
                     ordered=typ == "OrderedList",
-                    items=[_map_blocks(item, alloc, mapped) for item in (items or [])],
+                    items=[
+                        _map_blocks(item, alloc, mapped, display_envs) for item in (items or [])
+                    ],
                 )
             )
         elif typ == "Table":
@@ -460,8 +473,15 @@ def _map_blocks(nodes: list[Any], alloc: AnchorAllocator, mapped: MappedDoc) -> 
             attr = content[0] if isinstance(content, list) and content else []
             classes = attr[1] if isinstance(attr, list) and len(attr) > 1 else []
             children = _map_blocks(
-                content[1] if isinstance(content, list) and len(content) > 1 else [], alloc, mapped
+                content[1] if isinstance(content, list) and len(content) > 1 else [],
+                alloc,
+                mapped,
+                display_envs,
             )
+            if isinstance(attr, list) and attr and attr[0] and len(children) == 1:
+                child = children[0]
+                if isinstance(child, Table):
+                    mapped.source_ids[str(attr[0])] = child.id
             if "abstract" in classes:
                 mapped.meta_abstract = children
             else:
@@ -609,12 +629,30 @@ def _caption_nodes(value: Any) -> list[Any]:
     return nodes
 
 
-def map_ast(ast: dict[str, Any], alloc: AnchorAllocator) -> MappedDoc:
+def _display_envs(source_text: str) -> list[str]:
+    """Classify display math that Pandoc 3.1.x emits without its environment."""
+    pattern = re.compile(
+        r"\\begin\{(equation|align|gather|eqnarray|multline|flalign|alignat)(\*)?\}"
+        r"|\\\[|\$\$"
+    )
+    result: list[str] = []
+    for match in pattern.finditer(source_text):
+        if match.group(1):
+            result.append(match.group(1) + (match.group(2) or ""))
+        else:
+            result.append("display")
+    return result
+
+
+def map_ast(
+    ast: dict[str, Any], alloc: AnchorAllocator, source_text: str | None = None
+) -> MappedDoc:
     """Map a Pandoc AST while retaining raw-TeX and source side maps."""
     mapped = MappedDoc([], [], [], None, [], [], {}, {}, {}, set())
     blocks = ast.get("blocks", [])
+    display_envs = _display_envs(source_text) if source_text is not None else []
     mapped.body = _nest_sections(
-        _map_blocks(blocks if isinstance(blocks, list) else [], alloc, mapped)
+        _map_blocks(blocks if isinstance(blocks, list) else [], alloc, mapped, display_envs)
     )
     meta = ast.get("meta", {})
     if isinstance(meta, dict):
@@ -635,32 +673,30 @@ def _nest_sections(blocks: list[Block]) -> list[Block]:
     """Build section hierarchy from Pandoc's flat header stream."""
     result: list[Block] = []
     stack: list[Section] = []
+    children: dict[str, list[Block]] = {}
     for block in blocks:
         if isinstance(block, Section):
             while stack and stack[-1].level >= block.level:
                 stack.pop()
+            children[block.id] = list(block.children)
             if stack:
-                parent = stack[-1]
-                updated = parent.model_copy(update={"children": [*parent.children, block]})
-                stack[-1] = updated
-                if result and result[-1].id == parent.id:
-                    result[-1] = updated
-                else:
-                    _replace_by_id(result, parent.id, updated)
+                children[stack[-1].id].append(block)
             else:
                 result.append(block)
             stack.append(block)
         elif stack:
-            parent = stack[-1]
-            updated = parent.model_copy(update={"children": [*parent.children, block]})
-            stack[-1] = updated
-            if result and result[-1].id == parent.id:
-                result[-1] = updated
-            else:
-                _replace_by_id(result, parent.id, updated)
+            children[stack[-1].id].append(block)
         else:
             result.append(block)
-    return result
+
+    def materialize(block: Block) -> Block:
+        if not isinstance(block, Section):
+            return block
+        return block.model_copy(
+            update={"children": [materialize(child) for child in children[block.id]]}
+        )
+
+    return [materialize(block) for block in result]
 
 
 def _replace_by_id(blocks: list[Block], block_id: str, replacement: Block) -> bool:
