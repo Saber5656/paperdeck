@@ -13,8 +13,7 @@ import httpx
 
 ResponsePlan = Callable[
     [dict[str, Any]],
-    tuple[int, dict[str, Any] | str]
-    | tuple[int, dict[str, Any] | str, dict[str, str]],
+    tuple[int, dict[str, Any] | str] | tuple[int, dict[str, Any] | str, dict[str, str]],
 ]
 
 

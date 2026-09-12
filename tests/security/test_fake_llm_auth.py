@@ -23,7 +23,7 @@ def test_fake_llm_supports_scriptable_failures() -> None:
     responses = [
         (429, {"error": "rate limited"}, {"Retry-After": "0"}),
         (400, {"error": "json_schema unsupported"}),
-        (200, "{\"choices\":["),
+        (200, '{"choices":['),
     ]
 
     def plan(_request: dict[str, object]):
