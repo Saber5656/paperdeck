@@ -28,6 +28,10 @@ def test_release_only_grants_oidc_to_publish_and_requires_stable_pypi() -> None:
     assert "stable == 'true'" in text
 
 
+def test_ci_does_not_reference_secrets() -> None:
+    assert "secrets." not in _workflow("ci.yml")
+
+
 def test_version_is_hatch_dynamic_from_package_source() -> None:
     text = (ROOT / "pyproject.toml").read_text()
     assert 'dynamic = ["version"]' in text
