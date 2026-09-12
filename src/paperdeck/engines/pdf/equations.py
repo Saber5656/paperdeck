@@ -1,0 +1,1 @@
+"""PDF equation extraction placeholder."""

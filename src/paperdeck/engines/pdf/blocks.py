@@ -1,0 +1,1 @@
+"""PDF block clustering placeholder."""

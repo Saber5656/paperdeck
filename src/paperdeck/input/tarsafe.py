@@ -1,0 +1,1 @@
+"""Safe archive extraction placeholder."""

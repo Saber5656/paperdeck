@@ -1,0 +1,1 @@
+"""Asset inlining placeholder."""

@@ -1,0 +1,1 @@
+"""Self-containment validation placeholder."""

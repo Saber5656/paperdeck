@@ -1,0 +1,2292 @@
+{
+  "$defs": {
+    "Asset": {
+      "additionalProperties": false,
+      "properties": {
+        "data_b64": {
+          "title": "Data B64",
+          "type": "string"
+        },
+        "height_px": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height Px"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "mime": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/svg+xml"
+          ],
+          "title": "Mime",
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/AssetOrigin"
+        },
+        "width_px": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Px"
+        }
+      },
+      "required": [
+        "id",
+        "mime",
+        "data_b64",
+        "origin"
+      ],
+      "title": "Asset",
+      "type": "object"
+    },
+    "AssetOrigin": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        }
+      },
+      "required": [
+        "engine"
+      ],
+      "title": "AssetOrigin",
+      "type": "object"
+    },
+    "BibEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "type": {
+          "const": "bib_entry",
+          "default": "bib_entry",
+          "title": "Type",
+          "type": "string"
+        },
+        "urls": {
+          "items": {
+            "$ref": "#/$defs/BibUrl"
+          },
+          "title": "Urls",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "content",
+        "urls"
+      ],
+      "title": "BibEntry",
+      "type": "object"
+    },
+    "BibUrl": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "doi",
+            "arxiv",
+            "generic"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "kind"
+      ],
+      "title": "BibUrl",
+      "type": "object"
+    },
+    "Cell": {
+      "additionalProperties": false,
+      "properties": {
+        "colspan": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Colspan",
+          "type": "integer"
+        },
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "header": {
+          "default": false,
+          "title": "Header",
+          "type": "boolean"
+        },
+        "rowspan": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Rowspan",
+          "type": "integer"
+        },
+        "type": {
+          "const": "cell",
+          "default": "cell",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "Cell",
+      "type": "object"
+    },
+    "Cite": {
+      "additionalProperties": false,
+      "properties": {
+        "bib_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Bib Ids",
+          "type": "array"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "cite",
+          "default": "cite",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bib_ids",
+        "text"
+      ],
+      "title": "Cite",
+      "type": "object"
+    },
+    "Code": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "code",
+          "default": "code",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Code",
+      "type": "object"
+    },
+    "CodeBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "code_block",
+          "default": "code_block",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "CodeBlock",
+      "type": "object"
+    },
+    "Emph": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "type": {
+          "const": "emph",
+          "default": "emph",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "Emph",
+      "type": "object"
+    },
+    "Equation": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Id"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "content_kind": {
+          "enum": [
+            "latex",
+            "image"
+          ],
+          "title": "Content Kind",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "latex": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latex"
+        },
+        "latex_verified": {
+          "default": false,
+          "title": "Latex Verified",
+          "type": "boolean"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "type": {
+          "const": "equation",
+          "default": "equation",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "content_kind"
+      ],
+      "title": "Equation",
+      "type": "object"
+    },
+    "ExtLink": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "type": {
+          "const": "ext_link",
+          "default": "ext_link",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "content"
+      ],
+      "title": "ExtLink",
+      "type": "object"
+    },
+    "FallbackNote": {
+      "description": "Record why one conversion engine was skipped or failed.",
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "reason_code": {
+          "title": "Reason Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "engine",
+        "reason_code",
+        "detail"
+      ],
+      "title": "FallbackNote",
+      "type": "object"
+    },
+    "Figure": {
+      "additionalProperties": false,
+      "properties": {
+        "alt_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alt Text"
+        },
+        "asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Id"
+        },
+        "caption": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Caption",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "type": {
+          "const": "figure",
+          "default": "figure",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "caption"
+      ],
+      "title": "Figure",
+      "type": "object"
+    },
+    "FootnoteDef": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "code_block": "#/$defs/CodeBlock",
+                "equation": "#/$defs/Equation",
+                "figure": "#/$defs/Figure",
+                "footnote_def": "#/$defs/FootnoteDef",
+                "list": "#/$defs/ListBlock",
+                "paragraph": "#/$defs/Paragraph",
+                "quote": "#/$defs/Quote",
+                "section": "#/$defs/Section",
+                "table": "#/$defs/Table",
+                "unhandled": "#/$defs/Unhandled"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Section"
+              },
+              {
+                "$ref": "#/$defs/Paragraph"
+              },
+              {
+                "$ref": "#/$defs/Equation"
+              },
+              {
+                "$ref": "#/$defs/Figure"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/CodeBlock"
+              },
+              {
+                "$ref": "#/$defs/FootnoteDef"
+              },
+              {
+                "$ref": "#/$defs/Unhandled"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "number": {
+          "title": "Number",
+          "type": "string"
+        },
+        "type": {
+          "const": "footnote_def",
+          "default": "footnote_def",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "content"
+      ],
+      "title": "FootnoteDef",
+      "type": "object"
+    },
+    "FootnoteRef": {
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "title": "Number",
+          "type": "string"
+        },
+        "target_id": {
+          "title": "Target Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "footnote_ref",
+          "default": "footnote_ref",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "number"
+      ],
+      "title": "FootnoteRef",
+      "type": "object"
+    },
+    "LineBreak": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "line_break",
+          "default": "line_break",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "LineBreak",
+      "type": "object"
+    },
+    "ListBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "code_block": "#/$defs/CodeBlock",
+                  "equation": "#/$defs/Equation",
+                  "figure": "#/$defs/Figure",
+                  "footnote_def": "#/$defs/FootnoteDef",
+                  "list": "#/$defs/ListBlock",
+                  "paragraph": "#/$defs/Paragraph",
+                  "quote": "#/$defs/Quote",
+                  "section": "#/$defs/Section",
+                  "table": "#/$defs/Table",
+                  "unhandled": "#/$defs/Unhandled"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Section"
+                },
+                {
+                  "$ref": "#/$defs/Paragraph"
+                },
+                {
+                  "$ref": "#/$defs/Equation"
+                },
+                {
+                  "$ref": "#/$defs/Figure"
+                },
+                {
+                  "$ref": "#/$defs/Table"
+                },
+                {
+                  "$ref": "#/$defs/ListBlock"
+                },
+                {
+                  "$ref": "#/$defs/Quote"
+                },
+                {
+                  "$ref": "#/$defs/CodeBlock"
+                },
+                {
+                  "$ref": "#/$defs/FootnoteDef"
+                },
+                {
+                  "$ref": "#/$defs/Unhandled"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "ordered": {
+          "title": "Ordered",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "list",
+          "default": "list",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ordered",
+        "items"
+      ],
+      "title": "ListBlock",
+      "type": "object"
+    },
+    "LlmProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "calls": {
+          "default": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "cost_usd": {
+          "default": 0.0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "tokens_in": {
+          "default": 0,
+          "title": "Tokens In",
+          "type": "integer"
+        },
+        "tokens_out": {
+          "default": 0,
+          "title": "Tokens Out",
+          "type": "integer"
+        },
+        "vlm_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vlm Model"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "LlmProvenance",
+      "type": "object"
+    },
+    "Math": {
+      "additionalProperties": false,
+      "properties": {
+        "latex": {
+          "title": "Latex",
+          "type": "string"
+        },
+        "type": {
+          "const": "math",
+          "default": "math",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latex"
+      ],
+      "title": "Math",
+      "type": "object"
+    },
+    "Meta": {
+      "additionalProperties": false,
+      "properties": {
+        "abstract": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "code_block": "#/$defs/CodeBlock",
+                    "equation": "#/$defs/Equation",
+                    "figure": "#/$defs/Figure",
+                    "footnote_def": "#/$defs/FootnoteDef",
+                    "list": "#/$defs/ListBlock",
+                    "paragraph": "#/$defs/Paragraph",
+                    "quote": "#/$defs/Quote",
+                    "section": "#/$defs/Section",
+                    "table": "#/$defs/Table",
+                    "unhandled": "#/$defs/Unhandled"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Section"
+                  },
+                  {
+                    "$ref": "#/$defs/Paragraph"
+                  },
+                  {
+                    "$ref": "#/$defs/Equation"
+                  },
+                  {
+                    "$ref": "#/$defs/Figure"
+                  },
+                  {
+                    "$ref": "#/$defs/Table"
+                  },
+                  {
+                    "$ref": "#/$defs/ListBlock"
+                  },
+                  {
+                    "$ref": "#/$defs/Quote"
+                  },
+                  {
+                    "$ref": "#/$defs/CodeBlock"
+                  },
+                  {
+                    "$ref": "#/$defs/FootnoteDef"
+                  },
+                  {
+                    "$ref": "#/$defs/Unhandled"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Abstract"
+        },
+        "authors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/MetaLink"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "title": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Title",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title",
+        "authors",
+        "links"
+      ],
+      "title": "Meta",
+      "type": "object"
+    },
+    "MetaLink": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "arxiv",
+            "doi",
+            "generic"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "kind"
+      ],
+      "title": "MetaLink",
+      "type": "object"
+    },
+    "Paragraph": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "paragraph",
+          "default": "paragraph",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "content"
+      ],
+      "title": "Paragraph",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "engine_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Engine Versions",
+          "type": "object"
+        },
+        "fallbacks": {
+          "items": {
+            "$ref": "#/$defs/FallbackNote"
+          },
+          "title": "Fallbacks",
+          "type": "array"
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LlmProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "engine",
+        "engine_versions",
+        "created_at",
+        "fallbacks"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Quote": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "code_block": "#/$defs/CodeBlock",
+                "equation": "#/$defs/Equation",
+                "figure": "#/$defs/Figure",
+                "footnote_def": "#/$defs/FootnoteDef",
+                "list": "#/$defs/ListBlock",
+                "paragraph": "#/$defs/Paragraph",
+                "quote": "#/$defs/Quote",
+                "section": "#/$defs/Section",
+                "table": "#/$defs/Table",
+                "unhandled": "#/$defs/Unhandled"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Section"
+              },
+              {
+                "$ref": "#/$defs/Paragraph"
+              },
+              {
+                "$ref": "#/$defs/Equation"
+              },
+              {
+                "$ref": "#/$defs/Figure"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/CodeBlock"
+              },
+              {
+                "$ref": "#/$defs/FootnoteDef"
+              },
+              {
+                "$ref": "#/$defs/Unhandled"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "quote",
+          "default": "quote",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "content"
+      ],
+      "title": "Quote",
+      "type": "object"
+    },
+    "RefLink": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "eq",
+            "fig",
+            "tab",
+            "sec",
+            "bib",
+            "fn"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "target_id": {
+          "title": "Target Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "ref_link",
+          "default": "ref_link",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "kind",
+        "text"
+      ],
+      "title": "RefLink",
+      "type": "object"
+    },
+    "Section": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "code_block": "#/$defs/CodeBlock",
+                "equation": "#/$defs/Equation",
+                "figure": "#/$defs/Figure",
+                "footnote_def": "#/$defs/FootnoteDef",
+                "list": "#/$defs/ListBlock",
+                "paragraph": "#/$defs/Paragraph",
+                "quote": "#/$defs/Quote",
+                "section": "#/$defs/Section",
+                "table": "#/$defs/Table",
+                "unhandled": "#/$defs/Unhandled"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Section"
+              },
+              {
+                "$ref": "#/$defs/Paragraph"
+              },
+              {
+                "$ref": "#/$defs/Equation"
+              },
+              {
+                "$ref": "#/$defs/Figure"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/CodeBlock"
+              },
+              {
+                "$ref": "#/$defs/FootnoteDef"
+              },
+              {
+                "$ref": "#/$defs/Unhandled"
+              }
+            ]
+          },
+          "title": "Children",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "level": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "title": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Title",
+          "type": "array"
+        },
+        "type": {
+          "const": "section",
+          "default": "section",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "level",
+        "title",
+        "children"
+      ],
+      "title": "Section",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "arxiv_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arxiv Id"
+        },
+        "kind": {
+          "enum": [
+            "arxiv",
+            "local"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "original": {
+          "title": "Original",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "kind",
+        "original"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "Strong": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "type": {
+          "const": "strong",
+          "default": "strong",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "Strong",
+      "type": "object"
+    },
+    "Sub": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "type": {
+          "const": "sub",
+          "default": "sub",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "Sub",
+      "type": "object"
+    },
+    "Sup": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "type": {
+          "const": "sup",
+          "default": "sup",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "Sup",
+      "type": "object"
+    },
+    "Table": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Id"
+        },
+        "caption": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "cite": "#/$defs/Cite",
+                "code": "#/$defs/Code",
+                "emph": "#/$defs/Emph",
+                "ext_link": "#/$defs/ExtLink",
+                "footnote_ref": "#/$defs/FootnoteRef",
+                "line_break": "#/$defs/LineBreak",
+                "math": "#/$defs/Math",
+                "ref_link": "#/$defs/RefLink",
+                "strong": "#/$defs/Strong",
+                "sub": "#/$defs/Sub",
+                "sup": "#/$defs/Sup",
+                "text": "#/$defs/Text"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Emph"
+              },
+              {
+                "$ref": "#/$defs/Strong"
+              },
+              {
+                "$ref": "#/$defs/Sub"
+              },
+              {
+                "$ref": "#/$defs/Sup"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
+              },
+              {
+                "$ref": "#/$defs/RefLink"
+              },
+              {
+                "$ref": "#/$defs/Cite"
+              },
+              {
+                "$ref": "#/$defs/ExtLink"
+              },
+              {
+                "$ref": "#/$defs/FootnoteRef"
+              },
+              {
+                "$ref": "#/$defs/LineBreak"
+              }
+            ]
+          },
+          "title": "Caption",
+          "type": "array"
+        },
+        "content_kind": {
+          "enum": [
+            "grid",
+            "image"
+          ],
+          "title": "Content Kind",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/Cell"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rows"
+        },
+        "type": {
+          "const": "table",
+          "default": "table",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "caption",
+        "content_kind"
+      ],
+      "title": "Table",
+      "type": "object"
+    },
+    "Text": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "text",
+          "default": "text",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Text",
+      "type": "object"
+    },
+    "Unhandled": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "unhandled",
+          "default": "unhandled",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Unhandled",
+      "type": "object"
+    },
+    "Warning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "where": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Where"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "Warning",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/Saber5656/paperdeck/schema/ir-v1.json",
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Asset"
+      },
+      "title": "Assets",
+      "type": "object"
+    },
+    "bibliography": {
+      "items": {
+        "$ref": "#/$defs/BibEntry"
+      },
+      "title": "Bibliography",
+      "type": "array"
+    },
+    "body": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "code_block": "#/$defs/CodeBlock",
+            "equation": "#/$defs/Equation",
+            "figure": "#/$defs/Figure",
+            "footnote_def": "#/$defs/FootnoteDef",
+            "list": "#/$defs/ListBlock",
+            "paragraph": "#/$defs/Paragraph",
+            "quote": "#/$defs/Quote",
+            "section": "#/$defs/Section",
+            "table": "#/$defs/Table",
+            "unhandled": "#/$defs/Unhandled"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Section"
+          },
+          {
+            "$ref": "#/$defs/Paragraph"
+          },
+          {
+            "$ref": "#/$defs/Equation"
+          },
+          {
+            "$ref": "#/$defs/Figure"
+          },
+          {
+            "$ref": "#/$defs/Table"
+          },
+          {
+            "$ref": "#/$defs/ListBlock"
+          },
+          {
+            "$ref": "#/$defs/Quote"
+          },
+          {
+            "$ref": "#/$defs/CodeBlock"
+          },
+          {
+            "$ref": "#/$defs/FootnoteDef"
+          },
+          {
+            "$ref": "#/$defs/Unhandled"
+          }
+        ]
+      },
+      "title": "Body",
+      "type": "array"
+    },
+    "footnotes": {
+      "items": {
+        "$ref": "#/$defs/FootnoteDef"
+      },
+      "title": "Footnotes",
+      "type": "array"
+    },
+    "labels": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Labels",
+      "type": "object"
+    },
+    "macros": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Macros",
+      "type": "object"
+    },
+    "meta": {
+      "$ref": "#/$defs/Meta"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/Source"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/Warning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source",
+    "provenance",
+    "meta",
+    "body"
+  ],
+  "title": "Document",
+  "type": "object"
+}

@@ -1,0 +1,1 @@
+"""LaTeX reference resolution placeholder."""
