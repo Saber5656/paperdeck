@@ -157,11 +157,25 @@ def _inlines(
             else:
                 result.append(Text(text=_plain(node)))
         elif typ == "Link":
+            attributes = content[0] if isinstance(content, list) and content else []
             target = (
                 content[2][0]
                 if isinstance(content, list) and len(content) > 2 and content[2]
                 else ""
             )
+            reference = ""
+            if isinstance(attributes, list) and len(attributes) > 2:
+                key_values = attributes[2]
+                if isinstance(key_values, list):
+                    for pair in key_values:
+                        if isinstance(pair, list) and len(pair) > 1 and pair[0] == "reference":
+                            reference = str(pair[1])
+                            break
+            if str(target).startswith("#") and reference:
+                placeholder = f"{_START}{len(raw_spans)}{_END}"
+                raw_spans.append(RawSpan(placeholder, rf"\ref{{{reference}}}", context))
+                result.append(Text(text=placeholder))
+                continue
             child = _inlines(
                 content[1] if isinstance(content, list) and len(content) > 1 else [],
                 alloc,
@@ -409,8 +423,33 @@ def _map_blocks(nodes: list[Any], alloc: AnchorAllocator, mapped: MappedDoc) -> 
             and len(content) > 1
             and content[0] in {"tex", "latex"}
         ):
+            raw = str(content[1])
+            environment = re.match(r"\s*\\begin\{([A-Za-z]+)(\*)?\}", raw)
+            environment_name = (
+                environment.group(1) + (environment.group(2) or "") if environment else ""
+            )
+            if environment and environment_name.rstrip("*") in {
+                "equation",
+                "align",
+                "gather",
+                "eqnarray",
+                "multline",
+                "flalign",
+                "alignat",
+            }:
+                equation_id = alloc.next("eq")
+                mapped.env_map[equation_id] = environment_name
+                result.append(
+                    Equation(
+                        id=equation_id,
+                        content_kind="latex",
+                        latex=raw,
+                        latex_verified=True,
+                    )
+                )
+                continue
             placeholder = f"{_START}{len(mapped.raw_spans)}{_END}"
-            mapped.raw_spans.append(RawSpan(placeholder, str(content[1]), "block"))
+            mapped.raw_spans.append(RawSpan(placeholder, raw, "block"))
             result.append(Paragraph(id=alloc.next("para"), content=[Text(text=placeholder)]))
         elif typ == "RawBlock":
             mapped.warnings.append(
@@ -473,6 +512,7 @@ def _figure(content: Any, alloc: AnchorAllocator, mapped: MappedDoc) -> Figure:
 
 
 def _table(content: Any, alloc: AnchorAllocator, mapped: MappedDoc) -> Table:
+    attr = content[0] if isinstance(content, list) and content else []
     caption = content[1] if isinstance(content, list) and len(content) > 1 else []
     caption = _caption_nodes(
         caption[1] if isinstance(caption, list) and len(caption) > 1 else caption
@@ -499,8 +539,11 @@ def _table(content: Any, alloc: AnchorAllocator, mapped: MappedDoc) -> Table:
                 ):
                     body_rows = body_rows[0]
                 rows.extend(_table_rows(body_rows, alloc, mapped, False))
+    block_id = alloc.next("tab")
+    if isinstance(attr, list) and attr and attr[0]:
+        mapped.source_ids[str(attr[0])] = block_id
     return Table(
-        id=alloc.next("tab"),
+        id=block_id,
         caption=_inlines(
             caption, alloc, mapped.raw_spans, mapped.warnings, "inline", mapped=mapped
         ),

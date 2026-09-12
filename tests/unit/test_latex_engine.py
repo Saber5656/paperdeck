@@ -7,7 +7,7 @@ import pytest
 from paperdeck.config import load_settings
 from paperdeck.engines import EngineContext
 from paperdeck.engines.latex.engine import LatexEngine, _acquire_source
-from paperdeck.errors import ConversionError
+from paperdeck.errors import ConversionError, SecurityError
 from paperdeck.input.arxiv import ArxivMeta
 from paperdeck.input.cache import CacheManager
 from paperdeck.input.resolver import InputSpec
@@ -217,3 +217,22 @@ def test_latex_engine_preserves_arxiv_metadata_links(
         ("arxiv", "https://arxiv.org/abs/2401.12345v1"),
         ("doi", "https://doi.org/10.1234/cached"),
     ]
+
+
+def test_latex_engine_rejects_traversal_archive_before_pandoc(tmp_path: Path) -> None:
+    archive = tmp_path / "unsafe.tar"
+    with tarfile.open(archive, "w") as output:
+        payload = b"\\documentclass{article}\n"
+        member = tarfile.TarInfo("../escaped.tex")
+        member.size = len(payload)
+        output.addfile(member, __import__("io").BytesIO(payload))
+    settings = load_settings(None, {})
+    context = EngineContext(
+        spec=InputSpec("latex-local", path=archive, archive=True, original=str(archive)),
+        settings=settings,
+        cache=CacheManager(tmp_path / "cache"),
+        workdir=tmp_path,
+        confirm_cost=lambda _estimate: True,
+    )
+    with pytest.raises(SecurityError, match="archive"):
+        LatexEngine().convert(context)

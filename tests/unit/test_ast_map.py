@@ -1,4 +1,5 @@
 from paperdeck.engines.latex.ast_map import map_ast
+from paperdeck.engines.latex.counters import assign_numbers
 from paperdeck.ir.anchors import AnchorAllocator
 
 
@@ -108,3 +109,35 @@ def test_ast_map_handles_supported_inline_and_block_nodes() -> None:
     assert paragraph.type == "paragraph"
     assert any(item.type == "ext_link" for item in paragraph.content)
     assert any(item.code == "invalid-link-scheme" for item in mapped.warnings)
+
+
+def test_ast_map_recovers_raw_display_math_block() -> None:
+    mapped = map_ast(
+        {
+            "blocks": [
+                {
+                    "t": "RawBlock",
+                    "c": [
+                        "latex",
+                        r"\begin{align}x &= 1\label{eq:x}\\ y &= 2\nonumber\\ z &= 3\end{align}",
+                    ],
+                }
+            ],
+            "meta": {},
+        },
+        AnchorAllocator(),
+    )
+    assert mapped.body[0].type == "equation"
+    assert mapped.env_map[mapped.body[0].id] == "align"
+    numbered = assign_numbers(mapped, "")
+    assert [item.number for item in numbered.body if item.type == "equation"] == ["1", None, "2"]
+
+    starred = map_ast(
+        {
+            "blocks": [{"t": "RawBlock", "c": ["latex", r"\begin{align*}x &= 1\end{align*}"]}],
+            "meta": {},
+        },
+        AnchorAllocator(),
+    )
+    assert starred.env_map[starred.body[0].id] == "align*"
+    assert assign_numbers(starred, "").body[0].number is None

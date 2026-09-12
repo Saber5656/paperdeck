@@ -57,10 +57,20 @@ def _with_equation(eq: Equation, latex: str, number: str | None) -> Equation:
     return eq.model_copy(update={"latex": latex, "number": number})
 
 
+def _contains(value: object, marker: str) -> bool:
+    if isinstance(value, str):
+        return marker in value
+    if isinstance(value, dict):
+        return any(_contains(item, marker) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_contains(item, marker) for item in value)
+    return False
+
+
 def _walk_sections(
     blocks: list[Block],
     counters: list[int],
-    appendix: bool,
+    appendix: list[bool],
     labels: dict[str, str],
     mapped: MappedDoc,
     warnings: list[Warning],
@@ -68,6 +78,7 @@ def _walk_sections(
     number_within: bool,
     figure_counter: list[int],
     table_counter: list[int],
+    appendix_counter: list[int],
 ) -> list[Block]:
     result: list[Block] = []
     for block in blocks:
@@ -79,8 +90,11 @@ def _walk_sections(
                     counters[index] = 0
             if unnumbered:
                 number = None
-            elif appendix and block.level == 1:
-                number = chr(ord("A") + counters[0] - 1)
+            elif appendix[0] and block.level == 1:
+                appendix_counter[0] += 1
+                number = chr(ord("A") + appendix_counter[0] - 1)
+            elif appendix[0]:
+                number = ".".join(str(value) for value in counters[: block.level] if value)
             else:
                 number = ".".join(str(value) for value in counters[: block.level] if value)
             if block.level == 1 and number_within and not unnumbered:
@@ -96,9 +110,19 @@ def _walk_sections(
                 number_within,
                 figure_counter,
                 table_counter,
+                appendix_counter,
             )
             result.append(block.model_copy(update={"number": number, "children": children}))
             continue
+        if not appendix[0]:
+            marker = any(
+                span.tex.strip() == r"\appendix"
+                and _contains(block.model_dump(), span.placeholder_id)
+                for span in mapped.raw_spans
+            )
+            if marker:
+                appendix[0] = True
+                counters[:] = [0] * 6
         if isinstance(block, Figure) and block.caption:
             figure_counter[0] += 1
             result.append(block.model_copy(update={"number": str(figure_counter[0])}))
@@ -152,7 +176,7 @@ def _walk_sections(
 def assign_numbers(mapped: MappedDoc, preamble: str) -> MappedDoc:
     """Replay numbering and attach source labels to generated anchor ids."""
     warnings = list(mapped.warnings)
-    appendix = any("\\appendix" in span.tex for span in mapped.raw_spans)
+    appendix = [False]
     number_within = bool(
         re.search(r"\\numberwithin\s*\{\s*equation\s*\}\s*\{\s*section\s*\}", preamble)
     )
@@ -179,6 +203,7 @@ def assign_numbers(mapped: MappedDoc, preamble: str) -> MappedDoc:
         warnings,
         [0],
         number_within,
+        [0],
         [0],
         [0],
     )

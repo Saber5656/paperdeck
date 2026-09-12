@@ -1,0 +1,15 @@
+{
+  "snapshot": {
+    "title": "",
+    "sections": ["1 Prior Work", "References"],
+    "figures": 0,
+    "tables": 0,
+    "figure_refs": 0,
+    "table_refs": 0,
+    "bib_refs": 1,
+    "bib_entries": 1,
+    "math": 0,
+    "code": 0
+  },
+  "warnings": ["bib-source:bbl"]
+}
