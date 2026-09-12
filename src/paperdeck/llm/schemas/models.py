@@ -1,4 +1,5 @@
 """Versioned, bounded response models used at the LLM boundary."""
+
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -11,8 +12,17 @@ class StrictModel(BaseModel):
 
 
 Role = Literal[
-    "title", "author_line", "abstract", "heading", "paragraph", "display_equation",
-    "figure_caption", "table_caption", "table_body", "bib_entry", "noise",
+    "title",
+    "author_line",
+    "abstract",
+    "heading",
+    "paragraph",
+    "display_equation",
+    "figure_caption",
+    "table_caption",
+    "table_body",
+    "bib_entry",
+    "noise",
 ]
 
 
@@ -24,7 +34,7 @@ class SegmentBlock(StrictModel):
     links_to_block: str | None = Field(default=None, max_length=40)
 
     @model_validator(mode="after")
-    def heading_level(self) -> "SegmentBlock":
+    def heading_level(self) -> SegmentBlock:
         if self.role == "heading" and self.level is None:
             raise ValueError("heading role requires level")
         if self.role != "heading" and self.level is not None:
@@ -49,7 +59,7 @@ class BibEntryOutput(StrictModel):
     urls: list[str] = Field(default_factory=list, max_length=5)
 
     @model_validator(mode="after")
-    def safe_urls(self) -> "BibEntryOutput":
+    def safe_urls(self) -> BibEntryOutput:
         if any(not (u.startswith("http://") or u.startswith("https://")) for u in self.urls):
             raise ValueError("urls must use http(s)")
         return self

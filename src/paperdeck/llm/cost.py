@@ -1,4 +1,5 @@
 """Cost estimation and hard budget accounting for model calls."""
+
 from __future__ import annotations
 
 import math
@@ -27,7 +28,9 @@ def _pricing(settings: Any, model: str | None = None) -> tuple[float, float] | N
     return float(p.input_per_mtok), float(p.output_per_mtok)
 
 
-def estimate_pdf_run(page_count: int, char_count: int, equation_count: int, settings: Any) -> CostEstimate:
+def estimate_pdf_run(
+    page_count: int, char_count: int, equation_count: int, settings: Any
+) -> CostEstimate:
     """Return a rough ±50% estimate before any network call."""
     pages = max(0, int(page_count))
     chars = max(0, int(char_count))
@@ -46,7 +49,9 @@ def estimate_pdf_run(page_count: int, char_count: int, equation_count: int, sett
     assumptions = ["rough estimate; actual token use may vary by ±50%"]
     if price is None:
         usd = None
-        assumptions.append(f"no pricing configured for {model}; budget enforcement switches to token count")
+        assumptions.append(
+            f"no pricing configured for {model}; budget enforcement switches to token count"
+        )
     else:
         usd = tokens_in * price[0] / 1_000_000 + tokens_out * price[1] / 1_000_000
     return CostEstimate(calls, tokens_in, tokens_out, usd, assumptions, model)
@@ -82,7 +87,15 @@ class Ledger:
             price = _pricing(self.settings, model)
             if self._spent is not None and price is not None:
                 self._spent += pin * price[0] / 1_000_000 + pout * price[1] / 1_000_000
-            self._records.append({"purpose": purpose, "model": model, "usage": {**usage, "prompt_tokens": pin, "completion_tokens": pout}, "cache_hit": cache_hit, "usage_original": original if cache_hit else None})
+            self._records.append(
+                {
+                    "purpose": purpose,
+                    "model": model,
+                    "usage": {**usage, "prompt_tokens": pin, "completion_tokens": pout},
+                    "cache_hit": cache_hit,
+                    "usage_original": original if cache_hit else None,
+                }
+            )
 
     def spent_usd(self) -> float | None:
         with self._lock:
@@ -97,24 +110,51 @@ class Ledger:
             limit = float(self.settings.llm.max_cost_usd)
             if self._spent is None:
                 if self.token_count() + next_tokens > 2_000_000:
-                    raise CostLimitError("LLM token budget exceeded", "Reduce the PDF size or configure model pricing.", float(self.token_count() + next_tokens), 2_000_000.0)
+                    raise CostLimitError(
+                        "LLM token budget exceeded",
+                        "Reduce the PDF size or configure model pricing.",
+                        float(self.token_count() + next_tokens),
+                        2_000_000.0,
+                    )
                 return
             amount = float(next_call_estimate_usd or 0)
             if self._spent + amount > limit:
-                raise CostLimitError(f"LLM cost limit exceeded (${self._spent + amount:.2f} > ${limit:.2f})", "Increase max_cost_usd or use the LLM cache.", self._spent + amount, limit)
+                raise CostLimitError(
+                    f"LLM cost limit exceeded (${self._spent + amount:.2f} > ${limit:.2f})",
+                    "Increase max_cost_usd or use the LLM cache.",
+                    self._spent + amount,
+                    limit,
+                )
 
     def remaining_allows(self, estimate: float | int | None) -> bool:
         try:
-            self.check_budget(float(estimate) if estimate is not None else 0.0)
+            if self._spent is None:
+                self.check_budget(None, next_tokens=int(estimate or 0))
+            else:
+                self.check_budget(float(estimate) if estimate is not None else 0.0)
         except CostLimitError:
             return False
         return True
+
+    def call_estimate(self, purpose: str = "equation") -> float:
+        """Estimate one call in USD for degradation checks."""
+        if self._spent is None:
+            return 1024.0
+        price = _pricing(self.settings, self.model)
+        if price is None:
+            return 0.0
+        image_tokens = int(self.settings.llm.estimate.image_tokens_flat) + 200
+        output_tokens = 1024 if purpose == "equation" else 4096
+        return image_tokens * price[0] / 1_000_000 + output_tokens * price[1] / 1_000_000
 
 
 def format_estimate(est: CostEstimate) -> str:
     amount = f"~${est.usd:.2f}" if est.usd is not None else "unknown (no pricing configured)"
     model = est.model or "configured model"
-    lines = [f"LLM cost estimate: {amount} ({est.calls} calls, ~{est.tokens_in:,} in / ~{est.tokens_out:,} out tokens, model {model})"]
+    lines = [
+        f"LLM cost estimate: {amount} ({est.calls} calls, ~{est.tokens_in:,} in / "
+        f"~{est.tokens_out:,} out tokens, model {model})"
+    ]
     lines.extend(est.assumptions)
     lines.append("Proceed? [y/N]")
     return "\n".join(lines)

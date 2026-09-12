@@ -1,4 +1,5 @@
 """Load reviewed prompt templates without permitting accidental slot omission."""
+
 from __future__ import annotations
 
 import importlib.resources
@@ -13,7 +14,9 @@ def load_prompt(name: str, **slots: object) -> str:
         )
     except FileNotFoundError as exc:
         raise ValueError(f"unknown prompt: {name}") from exc
-    fields = {field_name for _, field_name, _, _ in string.Formatter().parse(template) if field_name}
+    fields = {
+        field_name for _, field_name, _, _ in string.Formatter().parse(template) if field_name
+    }
     missing = fields - slots.keys()
     unknown = slots.keys() - fields
     if missing:

@@ -1,10 +1,10 @@
 """LLM role classification over deterministic PDF blocks."""
+
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ...errors import LlmError
@@ -25,7 +25,7 @@ class RoleInfo:
 class HeadingNode:
     block_id: str
     level: int
-    children: tuple["HeadingNode", ...] = ()
+    children: list[HeadingNode] = field(default_factory=list)
 
 
 @dataclass
@@ -42,7 +42,18 @@ def _serialize(blocks: list[RawBlock]) -> str:
     rows = []
     for block in blocks:
         text = block.text[:600] + ("…" if len(block.text) > 600 else "")
-        rows.append(json.dumps({"id": block.id, "page": block.page, "bbox": [round(x) for x in block.bbox], "font_size_median": round(block.font_size_median), "text": text}, ensure_ascii=False))
+        rows.append(
+            json.dumps(
+                {
+                    "id": block.id,
+                    "page": block.page,
+                    "bbox": [round(x) for x in block.bbox],
+                    "font_size_median": round(block.font_size_median),
+                    "text": text,
+                },
+                ensure_ascii=False,
+            )
+        )
     return "\n".join(rows)
 
 
@@ -55,14 +66,16 @@ def _tree(headings: list[tuple[str, int]]) -> list[HeadingNode]:
             stack.pop()
         if stack:
             parent = stack[-1][1]
-            parent.children += (node,)
+            parent.children.append(node)
         else:
             roots.append(node)
         stack.append((level, node))
     return roots
 
 
-def _merge_paragraphs(blocks: list[RawBlock], roles: dict[str, RoleInfo]) -> list[tuple[str, str, list[str]]]:
+def _merge_paragraphs(
+    blocks: list[RawBlock], roles: dict[str, RoleInfo]
+) -> list[tuple[str, str, list[str]]]:
     result: list[tuple[str, str, list[str]]] = []
     for block in blocks:
         if roles.get(block.id, RoleInfo("noise")).role != "paragraph":
@@ -109,7 +122,10 @@ def segment(blocks: list[RawBlock], llm: Any) -> SegmentResult:
     for batch in batches:
         input_ids = [block.id for block in batch if not block.id.startswith("ctx-")]
         serialized = _serialize(batch)
-        messages = [{"role": "system", "content": "You are a document structure classifier."}, {"role": "user", "content": load_prompt("segment", blocks=serialized)}]
+        messages = [
+            {"role": "system", "content": "You are a document structure classifier."},
+            {"role": "user", "content": load_prompt("segment", blocks=serialized)},
+        ]
         response = llm.complete("segment", messages, PdfSegmentV1, max_tokens=8192)
         for attempt in range(2):
             returned = [entry.id for entry in response.blocks]
@@ -119,14 +135,23 @@ def segment(blocks: list[RawBlock], llm: Any) -> SegmentResult:
             if not missing and not unknown and not duplicate:
                 break
             if attempt:
-                raise LlmError("segment block coverage failed", "Retry the conversion with a more reliable model.", "segment-coverage")
-            feedback = f"Coverage error. Missing={missing}; unknown={unknown}; duplicated={duplicate}. Classify every input id exactly once."
+                raise LlmError(
+                    "segment block coverage failed",
+                    "Retry the conversion with a more reliable model.",
+                    "segment-coverage",
+                )
+            feedback = (
+                f"Coverage error. Missing={missing}; unknown={unknown}; "
+                f"duplicated={duplicate}. Classify every input id exactly once."
+            )
             messages.append({"role": "user", "content": feedback})
             response = llm.complete("segment", messages, PdfSegmentV1, max_tokens=8192)
         for entry in response.blocks:
             if entry.id not in input_ids:
                 continue
-            roles[entry.id] = RoleInfo(entry.role, entry.level, entry.number_text, entry.links_to_block)
+            roles[entry.id] = RoleInfo(
+                entry.role, entry.level, entry.number_text, entry.links_to_block
+            )
             if entry.links_to_block:
                 links[entry.id] = entry.links_to_block
             if entry.role == "heading":
@@ -151,9 +176,13 @@ def segment(blocks: list[RawBlock], llm: Any) -> SegmentResult:
             if seen_abstract > 1:
                 roles[block.id] = RoleInfo("paragraph")
                 warnings.append(f"duplicate-abstract:{block.id}")
-    noise_ids = {block.id for block in blocks if roles.get(block.id, RoleInfo("noise")).role == "noise"}
+    noise_ids = {
+        block.id for block in blocks if roles.get(block.id, RoleInfo("noise")).role == "noise"
+    }
     order = [block_id for block_id in order if block_id not in noise_ids]
-    return SegmentResult(roles, _tree(heading_ids), order, warnings, _merge_paragraphs(blocks, roles), links)
+    return SegmentResult(
+        roles, _tree(heading_ids), order, warnings, _merge_paragraphs(blocks, roles), links
+    )
 
 
 __all__ = ["HeadingNode", "RoleInfo", "SegmentResult", "segment"]

@@ -1,5 +1,5 @@
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from paperdeck.llm.schemas import (
     PdfBibV1,

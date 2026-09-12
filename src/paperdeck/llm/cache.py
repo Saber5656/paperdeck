@@ -1,20 +1,30 @@
 """Content addressed, privacy-preserving cache for validated LLM responses."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import re
 import tempfile
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+log = logging.getLogger(__name__)
 
-def request_key(model: str, messages: list[dict[str, Any]], schema_name: str, schema_version: str) -> str:
-    payload = {"model": model, "messages": messages, "schema_name": schema_name, "schema_version": schema_version}
+
+def request_key(
+    model: str, messages: list[dict[str, Any]], schema_name: str, schema_version: str
+) -> str:
+    payload = {
+        "model": model,
+        "messages": messages,
+        "schema_name": schema_name,
+        "schema_version": schema_version,
+    }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     return hashlib.sha256(raw).hexdigest()
 
@@ -28,7 +38,9 @@ class LlmCache:
         self.enabled = enabled
         self._identity_by_key: dict[str, tuple[str, str, str]] = {}
 
-    def bind_model(self, cache_key: str, model: str, schema_name: str = "", schema_version: str = "v1") -> None:
+    def bind_model(
+        self, cache_key: str, model: str, schema_name: str = "", schema_version: str = "v1"
+    ) -> None:
         self._identity_by_key[cache_key] = (model, schema_name, schema_version)
 
     def _path(self, cache_key: str, model: str | None = None) -> Path:
@@ -41,7 +53,14 @@ class LlmCache:
             pass
         return directory / f"{cache_key}.json"
 
-    def get(self, cache_key: str, schema: type[BaseModel], schema_version: str, *, model: str | None = None) -> str | None:
+    def get(
+        self,
+        cache_key: str,
+        schema: type[BaseModel],
+        schema_version: str,
+        *,
+        model: str | None = None,
+    ) -> str | None:
         if not self.enabled:
             return None
         identity = self._identity_by_key.get(cache_key)
@@ -59,10 +78,20 @@ class LlmCache:
                     path.unlink()
                 except OSError:
                     pass
+            log.info("llm-cache-stale key=%s", cache_key)
             return None
         return str(content)
 
-    def put(self, cache_key: str, response_content: str, usage: dict[str, Any], *, model: str | None = None, schema_name: str = "", schema_version: str = "v1") -> None:
+    def put(
+        self,
+        cache_key: str,
+        response_content: str,
+        usage: dict[str, Any],
+        *,
+        model: str | None = None,
+        schema_name: str = "",
+        schema_version: str = "v1",
+    ) -> None:
         identity = self._identity_by_key.get(cache_key)
         model = model or (identity[0] if identity else None)
         if identity:
@@ -72,7 +101,7 @@ class LlmCache:
         payload = {
             "schema_name": schema_name,
             "schema_version": schema_version,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "response_content": response_content,
             "usage": usage,
         }
