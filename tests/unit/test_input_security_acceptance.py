@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import gzip
 import io
+import re
+import socket
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -131,6 +133,30 @@ def test_resolver_local_suffixes_directory_and_safe_slugs(tmp_path: Path) -> Non
         resolve(str(tmp_path))
     weird = InputSpec("pdf-local", path=tmp_path / "unsafe name!.pdf")
     assert output_slug(weird) == "unsafe-name-"
+
+
+def test_resolver_slug_property_and_no_network_or_write_side_effects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_write(*_args, **_kwargs):
+        raise AssertionError("resolver attempted a write")
+
+    def fail_network(*_args, **_kwargs):
+        raise AssertionError("resolver attempted network access")
+
+    monkeypatch.setattr(Path, "write_text", fail_write)
+    monkeypatch.setattr(Path, "write_bytes", fail_write)
+    monkeypatch.setattr(socket, "create_connection", fail_network)
+    names = ["paper.tex", "paper name!.tex", "...pdf", "ümlaut.tar.gz", "x" * 80 + ".pdf"]
+    for name in names:
+        path = tmp_path / name
+        path.touch()
+        slug = output_slug(resolve(str(path)))
+        assert re.fullmatch(r"[A-Za-z0-9._-]+", slug)
+        assert slug == output_slug(resolve(str(path)))
+    for raw in ("2401.12345", "arxiv:hep-th/9901001v2"):
+        slug = output_slug(resolve(raw))
+        assert re.fullmatch(r"[A-Za-z0-9._-]+", slug)
 
 
 def test_netgate_user_agent_rate_limit_and_local_llm_cap(monkeypatch) -> None:
