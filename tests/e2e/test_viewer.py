@@ -194,3 +194,28 @@ def test_editable_and_composition_keyboard_events_are_ignored(page):
     for modifier in ("Control", "Meta", "Alt"):
         page.keyboard.press(modifier + "+d")
     assert page.locator("html").get_attribute("data-theme-mode") == before
+
+
+def test_long_math_does_not_expand_page_before_or_after_rendering(page):
+    page.evaluate(r"""() => {
+      const p = document.createElement('p');
+      p.style.marginTop = '10000px';
+      p.id = 'long-math-regression';
+      const math = document.createElement('span');
+      math.className = 'pd-math';
+      math.dataset.latex = '\\frac{' + Array(80).fill('\\mathbf{x}_{i}').join('') + '}{y}';
+      math.textContent = math.dataset.latex;
+      p.append(math); document.querySelector('main').append(p);
+    }""")
+    for width in (1440, 320):
+        page.set_viewport_size({"width": width, "height": 1024})
+        assert page.evaluate("() => document.documentElement.scrollWidth <= innerWidth")
+    page.locator("#long-math-regression").scroll_into_view_if_needed()
+    page.evaluate("() => pd.math.renderInto(document.querySelector('#long-math-regression'))")
+    expect(page.locator("#long-math-regression .katex")).to_have_count(1)
+    for width in (1440, 320):
+        page.set_viewport_size({"width": width, "height": 1024})
+        assert page.evaluate("() => document.documentElement.scrollWidth <= innerWidth")
+    assert page.locator("#long-math-regression .pd-math").evaluate(
+        "el => el.scrollWidth > el.clientWidth"
+    )
