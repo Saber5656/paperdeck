@@ -89,7 +89,13 @@
         event.preventDefault(); go(link.hash.slice(1));
       });
       pd.jump = {go, back};
-      if (location.hash) requestAnimationFrame(() => requestAnimationFrame(() => go(decodeURIComponent(location.hash.slice(1)), false)));
+      if (location.hash) {
+        // A fragment opens below the initial viewport. Finish math and font layout
+        // before measuring its destination so lazy rendering cannot move the anchor.
+        pd.math.renderInto(pd.qs('#pd-content') || document.body);
+        const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
+        fontsReady.then(() => requestAnimationFrame(() => requestAnimationFrame(() => go(decodeURIComponent(location.hash.slice(1)), false))));
+      }
     })();
     // ---- feature: toc ----
     (() => {
