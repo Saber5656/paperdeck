@@ -22,6 +22,9 @@ def test_converted_pdf_crop_citation_and_offline_browser(tmp_path):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         context = browser.new_context(offline=True)
+        context.add_init_script("""Object.defineProperty(navigator, 'clipboard', {
+          value: {writeText: async text => { window.copiedLatex = text; }}
+        });""")
         page = context.new_page()
         requests, errors = [], []
         page.on(
@@ -32,6 +35,11 @@ def test_converted_pdf_crop_citation_and_offline_browser(tmp_path):
         assert page.locator(".pd-eq img").count() >= 1
         assert page.locator(".pd-copy-latex").count() >= 1
         assert "unverified" in page.locator(".pd-copy-latex").first.inner_text().lower()
+        copy = page.locator(".pd-copy-latex").first
+        latex = copy.get_attribute("data-latex")
+        copy.click()
+        expect(copy).to_have_text("Copied (unverified LaTeX)")
+        assert page.evaluate("() => window.copiedLatex") == latex
         citation = page.locator('main a[data-kind="bib"]').first
         citation.scroll_into_view_if_needed()
         citation.focus()

@@ -165,3 +165,32 @@ def test_storage_denial_does_not_break_reader(page):
     assert page.locator("html").get_attribute("data-theme-mode") == "light"
     page.keyboard.press("?")
     expect(page.locator("#pd-help")).to_be_visible()
+
+
+def test_automatic_theme_tracks_os_but_explicit_theme_does_not(page):
+    page.emulate_media(color_scheme="dark")
+    expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+    page.locator("#pd-theme-toggle").click()
+    expect(page.locator("html")).to_have_attribute("data-theme-mode", "light")
+    page.emulate_media(color_scheme="light")
+    page.emulate_media(color_scheme="dark")
+    expect(page.locator("html")).to_have_attribute("data-theme", "light")
+
+
+def test_editable_and_composition_keyboard_events_are_ignored(page):
+    before = page.locator("html").get_attribute("data-theme-mode")
+    page.evaluate("""() => {
+      for (const name of ['input', 'textarea', 'select', 'div']) {
+        const el = document.createElement(name);
+        if (name === 'div') el.contentEditable = 'true';
+        document.body.append(el); el.focus();
+        el.dispatchEvent(new KeyboardEvent('keydown', {key: 'd', bubbles: true}));
+        el.remove();
+      }
+      document.body.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'd', bubbles: true, isComposing: true
+      }));
+    }""")
+    for modifier in ("Control", "Meta", "Alt"):
+        page.keyboard.press(modifier + "+d")
+    assert page.locator("html").get_attribute("data-theme-mode") == before
