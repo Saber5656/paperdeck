@@ -1,0 +1,17 @@
+{% from '_inline.j2' import inlines with context %}
+{% macro blocks(nodes) -%}{% for n in nodes %}{{ block(n) }}{% endfor %}{%- endmacro %}
+{% macro image(id, alt, crop=false) -%}
+{% if id and id in bundle.image_srcs %}<img src="{{ bundle.image_srcs[id] }}" alt="{{ alt }}"{% if crop %} class="pd-img-crop"{% endif %} loading="lazy">{% else %}<div class="pd-placeholder">{{ alt or 'Image unavailable' }}</div>{% endif %}
+{%- endmacro %}
+{% macro block(n) -%}
+{% if n.type == 'section' %}<section id="{{ n.id }}"><h{{ [n.level + 1, 6]|min }}>{% if n.number %}<span class="pd-number">{{ n.number }}</span>{% endif %}{{ inlines(n.title) }}</h{{ [n.level + 1, 6]|min }}>{{ blocks(n.children) }}</section>
+{% elif n.type == 'paragraph' %}<p id="{{ n.id }}">{{ inlines(n.content) }}</p>
+{% elif n.type == 'equation' %}<div class="pd-eq" id="{{ n.id }}"{% if n.content_kind == 'latex' %} data-latex="{{ n.latex }}"{% endif %}{% if n.number %} data-number="({{ n.number }})"{% endif %}>{% if n.content_kind == 'image' %}{{ image(n.asset_id, 'equation (unverified LaTeX attached)', true) }}{% endif %}{% if n.number %}<span class="pd-eq-number">({{ n.number }})</span>{% endif %}{% if n.content_kind == 'image' and n.latex %}<button class="pd-copy-latex" data-latex="{{ n.latex }}">Copy LaTeX (unverified)</button>{% endif %}</div>
+{% elif n.type == 'figure' %}<figure id="{{ n.id }}">{{ image(n.asset_id, n.alt_text or 'Figure image unavailable') }}<figcaption>{% if n.number %}<strong>Figure {{ n.number }}.</strong> {% endif %}{{ inlines(n.caption) }}</figcaption></figure>
+{% elif n.type == 'table' %}<figure id="{{ n.id }}"><figcaption>{% if n.number %}<strong>Table {{ n.number }}.</strong> {% endif %}{{ inlines(n.caption) }}</figcaption>{% if n.content_kind == 'image' %}{{ image(n.asset_id, 'Table image', true) }}{% else %}<div class="pd-table-wrap"><table>{% for row in n.rows %}<tr>{% for cell in row %}<{{ 'th' if cell.header else 'td' }} colspan="{{ cell.colspan }}" rowspan="{{ cell.rowspan }}"{% if cell.header %} scope="col"{% endif %}>{{ inlines(cell.content) }}</{{ 'th' if cell.header else 'td' }}>{% endfor %}</tr>{% endfor %}</table></div>{% endif %}</figure>
+{% elif n.type == 'list' %}<{{ 'ol' if n.ordered else 'ul' }} id="{{ n.id }}">{% for item in n['items'] %}<li>{{ blocks(item) }}</li>{% endfor %}</{{ 'ol' if n.ordered else 'ul' }}>
+{% elif n.type == 'quote' %}<blockquote id="{{ n.id }}">{{ blocks(n.content) }}</blockquote>
+{% elif n.type == 'code_block' %}<pre id="{{ n.id }}"><code{% if n.language %} class="language-{{ n.language }}"{% endif %}>{{ n.text }}</code></pre>
+{% elif n.type == 'footnote_def' %}<li id="{{ n.id }}" value="{{ n.number }}">{{ blocks(n.content) }}<a class="pd-fn-back" href="#pd-fn-link-{{ n.id }}" aria-label="Return from footnote">Back to text</a></li>
+{% elif n.type == 'unhandled' %}<div class="pd-unhandled" id="{{ n.id }}">{{ n.text }}</div>{% endif %}
+{%- endmacro %}
