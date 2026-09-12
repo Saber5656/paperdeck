@@ -80,7 +80,11 @@ def build_bundle(doc: Document, settings: Settings) -> AssetsBundle:
             Script(text, base64.b64encode(hashlib.sha256(text.encode()).digest()).decode())
         )
     doc_id = hashlib.sha256(
-        json.dumps(doc.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+        json.dumps(
+            doc.model_dump(mode="json", exclude={"provenance", "warnings"}),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
     ).hexdigest()[:16]
     data_json = (
         json.dumps(
