@@ -141,3 +141,52 @@ def test_ast_map_recovers_raw_display_math_block() -> None:
     )
     assert starred.env_map[starred.body[0].id] == "align*"
     assert assign_numbers(starred, "").body[0].number is None
+
+
+def test_ast_map_uses_source_to_restore_old_pandoc_display_math_environments() -> None:
+    ast = {
+        "blocks": [
+            {
+                "t": "Para",
+                "c": [
+                    {"t": "Math", "c": [{"t": "DisplayMath"}, r"\label{eq:a}x=1"]},
+                    {"t": "SoftBreak"},
+                    {
+                        "t": "Math",
+                        "c": [{"t": "DisplayMath"}, r"\begin{aligned}y&=2\\z&=3\end{aligned}"],
+                    },
+                ],
+            }
+        ],
+        "meta": {},
+    }
+    mapped = map_ast(
+        ast,
+        AnchorAllocator(),
+        r"\begin{equation}x=1\end{equation}\begin{align}y&=2\\z&=3\end{align}",
+    )
+    numbered = assign_numbers(mapped, "")
+    equations = [item for item in numbered.body if item.type == "equation"]
+    assert [item.number for item in equations] == ["1", "2", "3"]
+
+
+def test_ast_map_preserves_deep_section_descendants() -> None:
+    ast = {
+        "blocks": [
+            {"t": "Header", "c": [1, ["one", [], []], [{"t": "Str", "c": "One"}]]},
+            {"t": "Header", "c": [2, ["two", [], []], [{"t": "Str", "c": "Two"}]]},
+            {"t": "Header", "c": [3, ["three", [], []], [{"t": "Str", "c": "Three"}]]},
+            {"t": "Para", "c": [{"t": "Str", "c": "Deep"}]},
+            {"t": "Header", "c": [2, ["two-b", [], []], [{"t": "Str", "c": "Two B"}]]},
+            {"t": "Para", "c": [{"t": "Str", "c": "Sibling"}]},
+        ],
+        "meta": {},
+    }
+    mapped = map_ast(ast, AnchorAllocator())
+    one = mapped.body[0]
+    assert one.type == "section"
+    two, two_b = one.children
+    assert two.type == "section" and two_b.type == "section"
+    assert two.children[0].type == "section"
+    assert two.children[0].children[0].type == "paragraph"
+    assert two_b.children[0].type == "paragraph"

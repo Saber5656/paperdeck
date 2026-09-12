@@ -15,6 +15,19 @@ _END_COMMENT_ENV = re.compile(r"\\end\{(verbatim|lstlisting|filecontents)(?:\*?)
 _INCLUDE = re.compile(r"\\(input|include)\s*\{([^{}]*)\}")
 
 
+def _include_matches(text: str) -> list[re.Match[str]]:
+    """Return includes outside literal source environments."""
+    protected: list[tuple[int, int]] = []
+    for opening in _COMMENT_ENV.finditer(text):
+        closing = _END_COMMENT_ENV.search(text, opening.end())
+        protected.append((opening.start(), closing.end() if closing else len(text)))
+    return [
+        match
+        for match in _INCLUDE.finditer(text)
+        if not any(start <= match.start() < end for start, end in protected)
+    ]
+
+
 @dataclass
 class LatexProject:
     root: Path
@@ -82,7 +95,7 @@ def _reachable(path: Path, root: Path, seen: set[Path] | None = None) -> set[Pat
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return seen
-    for match in _INCLUDE.finditer(text):
+    for match in _include_matches(text):
         target = match.group(2)
         candidate = root / target
         if candidate.suffix.lower() != ".tex":
@@ -178,7 +191,7 @@ def prepare(source: Path) -> LatexProject:
         text = strip_comments(_read(resolved, warnings))
         cursor = 0
         pieces: list[str] = []
-        for match in _INCLUDE.finditer(text):
+        for match in _include_matches(text):
             pieces.append(text[cursor : match.start()])
             kind, name = match.groups()
             try:

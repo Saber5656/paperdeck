@@ -31,6 +31,22 @@ def test_comments_keep_verbatim_and_escaped_percent() -> None:
     assert "gone" not in result and "\\% kept" in result and "a % kept" in result
 
 
+def test_include_commands_inside_literal_environments_are_not_expanded(tmp_path: Path) -> None:
+    main = _main(
+        "\\documentclass{x}\n\\begin{document}\n"
+        "\\begin{verbatim}\n\\input{literal}\n\\end{verbatim}\n"
+        "\\input{real}\n\\end{document}",
+        tmp_path,
+    )
+    (tmp_path / "literal.tex").write_text("MUST NOT APPEAR", encoding="utf-8")
+    (tmp_path / "real.tex").write_text("REAL CONTENT", encoding="utf-8")
+    project = prepare(main)
+    flattened = project.flattened.read_text(encoding="utf-8")
+    assert "\\input{literal}" in flattened
+    assert "MUST NOT APPEAR" not in flattened
+    assert "REAL CONTENT" in flattened
+
+
 def test_include_escape_and_cycle_fail(tmp_path: Path) -> None:
     main = _main(
         "\\documentclass{x}\n\\begin{document}\n\\input{../../etc/passwd}\n\\end{document}",

@@ -4,7 +4,18 @@ from paperdeck.engines.latex.ast_map import MappedDoc, RawSpan
 from paperdeck.engines.latex.bib import BibRef
 from paperdeck.engines.latex.refs import resolve_references
 from paperdeck.errors import ConversionError
-from paperdeck.ir.model import Equation, Figure, Paragraph, Section, Table, Text
+from paperdeck.ir.model import (
+    Emph,
+    Equation,
+    Figure,
+    Paragraph,
+    Section,
+    Strong,
+    Sub,
+    Sup,
+    Table,
+    Text,
+)
 
 
 def test_reference_resolution_covers_styles_citations_and_footnotes() -> None:
@@ -116,3 +127,23 @@ def test_reference_resolution_ignores_extracted_bibliography_block() -> None:
     )
     result = resolve_references(doc, {}, {"x": BibRef("bib-1", "1", None)})
     assert not any(item.code.startswith("raw-tex-dropped") for item in result.warnings)
+
+
+@pytest.mark.parametrize("wrapper", [Emph, Strong, Sub, Sup])
+def test_reference_resolution_rewrites_sentinels_in_all_inline_containers(wrapper: type) -> None:
+    wrapped = wrapper(content=[Text(text="\ue0000\ue001")])
+    doc = MappedDoc(
+        [Paragraph(id="p", content=[wrapped])],
+        [],
+        [],
+        None,
+        [],
+        [RawSpan("\ue0000\ue001", r"\ref{x}", "inline")],
+        {},
+        {},
+        {},
+        set(),
+    )
+    result = resolve_references(doc, {"x": "eq-1"}, {})
+    content = result.body[0].content[0].content
+    assert content[0].type == "ref_link"

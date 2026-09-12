@@ -121,10 +121,9 @@ class LatexEngine:
         try:
             result = run_pandoc(project.flattened, project.root, ctx.settings.llm.timeout_s)
             allocator = AnchorAllocator()
-            mapped = map_ast(result.ast, allocator)
-            mapped.source_labels = set(
-                re.findall(r"\\label\s*\{([^}]+)\}", project.flattened.read_text(encoding="utf-8"))
-            )
+            source_text = project.flattened.read_text(encoding="utf-8")
+            mapped = map_ast(result.ast, allocator, source_text)
+            mapped.source_labels = set(re.findall(r"\\label\s*\{([^}]+)\}", source_text))
             mapped.warnings.extend(project.warnings)
             mapped.warnings.extend(
                 Warning(code="pandoc-warning", message=warning) for warning in result.warnings
