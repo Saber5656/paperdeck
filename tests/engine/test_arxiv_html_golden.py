@@ -35,11 +35,7 @@ def _snapshot(document: Document, source_ids: dict[str, str]) -> dict[str, objec
                 visit(child)
 
     visit(nodes)
-    equations = [
-        block
-        for block in _blocks(document.body)
-        if block.get("type") == "equation"
-    ]
+    equations = [block for block in _blocks(document.body) if block.get("type") == "equation"]
     figures = [block for block in _blocks(document.body) if block.get("type") == "figure"]
     tables = [block for block in _blocks(document.body) if block.get("type") == "table"]
     return {
@@ -87,9 +83,7 @@ def test_healthy_synthetic_fixture_matches_ir_golden_and_renders(tmp_path: Path)
     page.write_bytes(FIXTURE.read_bytes())
     assets = page.parent / "assets"
     assets.mkdir()
-    (assets / "plot.png").write_bytes(
-        (FIXTURE.parent / "assets" / "plot.png").read_bytes()
-    )
+    (assets / "plot.png").write_bytes((FIXTURE.parent / "assets" / "plot.png").read_bytes())
     artifact = HtmlArtifact(page, {"plot.png": "plot.png"}, [], "fixture")
     structure = parse_structure(
         BeautifulSoup(page.read_text(), "html.parser"), artifact, AnchorAllocator(), None
