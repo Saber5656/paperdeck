@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from paperdeck.engines.arxiv_html.parse_structure import parse_structure
 from paperdeck.input.arxiv import HtmlArtifact
 from paperdeck.ir.anchors import AnchorAllocator
-from paperdeck.ir.model import Figure, ListBlock, Table, Unhandled
+from paperdeck.ir.model import Figure, ListBlock, Paragraph, Table, Unhandled
 
 
 def _parse(tmp_path: Path, html: str, assets: dict[str, bytes] | None = None):
@@ -44,9 +44,12 @@ def test_structure_maps_tree_table_list_and_safe_svg(tmp_path: Path) -> None:
 
 
 def test_structure_unknown_and_duplicate_ids_are_safe(tmp_path: Path) -> None:
-    html = """<html><body><h1 class="ltx_title_document">P</h1><div class="ltx_page_main"><section class="ltx_section" id="s"><div class="ltx_para" id="dup"><p class="ltx_p">a</p></div><div class="ltx_para" id="dup"><p class="ltx_p">b</p></div><div class="ltx_future">raw</div></section></div></body></html>"""
+    html = """<html><body><h1 class="ltx_title_document">P</h1><div class="ltx_page_main"><section class="ltx_section" id="s"><div class="ltx_para" id="dup"><p class="ltx_p">a</p></div><div class="ltx_para" id="dup"><p class="ltx_p">b</p></div><p class="ltx_p" id="direct">direct</p><div class="ltx_future">raw</div></section></div></body></html>"""
     result = _parse(tmp_path, html)
     children = result.body[0].children
     assert sum(isinstance(item, Unhandled) for item in children) == 1
     assert any(w.code == "html-id-duplicate" for w in result.warnings)
+    assert any(
+        isinstance(item, Paragraph) and item.content[0].text == "direct" for item in children
+    )
     assert any(w.code.startswith("ltx-class-unhandled:") for w in result.warnings)

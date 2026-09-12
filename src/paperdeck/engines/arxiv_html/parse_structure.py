@@ -179,6 +179,9 @@ def _children(
             anchor = _block_id(child, "para", alloc, result)
             result.elements[anchor] = para
             blocks.append(Paragraph(id=anchor, content=[Text(text=_text(para))]))
+        elif "ltx_p" in classes:
+            anchor = _block_id(child, "para", alloc, result)
+            blocks.append(Paragraph(id=anchor, content=[Text(text=_text(child))]))
         elif child.name == "figure" and "ltx_figure" in classes:
             anchor = _block_id(child, "fig", alloc, result)
             aid = _asset(child, result.artifact, result) if result.artifact else None
