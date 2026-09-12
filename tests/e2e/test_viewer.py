@@ -206,6 +206,9 @@ def test_long_math_does_not_expand_page_before_or_after_rendering(page):
       math.dataset.latex = '\\frac{' + Array(80).fill('\\mathbf{x}_{i}').join('') + '}{y}';
       math.textContent = math.dataset.latex;
       p.append(math); document.querySelector('main').append(p);
+      const raw = document.createElement('div');
+      raw.className = 'pd-unhandled'; raw.textContent = 'raw_source_token'.repeat(150);
+      document.querySelector('main').append(raw);
     }""")
     for width in (1440, 320):
         page.set_viewport_size({"width": width, "height": 1024})
