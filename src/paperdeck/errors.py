@@ -85,6 +85,7 @@ class ConfigError(PaperdeckError):
     default_code = "config-error"
 
 
+_ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -92,7 +93,7 @@ class SecurityError(PaperdeckError):
     default_code = "security-error"
 
     def __init__(self, user_message: str, hint: str, code: str | None = None) -> None:
-        safe = _CONTROL_RE.sub("", user_message)[:120]
+        safe = _CONTROL_RE.sub("", _ANSI_RE.sub("", user_message))[:120]
         super().__init__(safe, hint, code)
 
 
@@ -152,4 +153,8 @@ def present_error(exc: BaseException, verbose: int = 0) -> tuple[str, int]:
     rendered = f"error: {message}\nhint: {hint}{extra}"
     if verbose >= 2:
         rendered += "\n" + "".join(traceback_module.format_exception(exc)).rstrip()
+    if isinstance(exc, SecurityError):
+        # Security diagnostics may include attacker-controlled names. Keep the
+        # complete presentation bounded, including a verbose traceback.
+        rendered = rendered[:200]
     return rendered, _exit_code(exc)

@@ -108,6 +108,7 @@ def extract_tar(src: Path, dest: Path, limits) -> list[Path]:  # type: ignore[no
     """Extract a tar archive into *dest* after validating all members."""
     src, dest = Path(src), Path(dest)
     cap = int(limits.max_archive_total_mb) * 1024 * 1024
+    compressed_size = max(src.stat().st_size, 1)
     temporary = dest.parent / f".{dest.name}.extract-{uuid.uuid4().hex}"
     temporary.mkdir(parents=True, mode=0o700)
     total = 0
@@ -147,7 +148,7 @@ def extract_tar(src: Path, dest: Path, limits) -> list[Path]:  # type: ignore[no
                         if not chunk:
                             break
                         total += len(chunk)
-                        if len(chunk) > cap or total > cap:
+                        if len(chunk) > cap or total > cap or total > compressed_size * 100:
                             raise SecurityError(
                                 "Archive decompressed size exceeded the configured cap",
                                 "use an archive within the configured size limit",
@@ -175,6 +176,7 @@ def gunzip_file(src: Path, dest: Path, max_mb: int) -> Path:
     """Decompress one gzip member with a streaming output cap."""
     src, dest = Path(src), Path(dest)
     cap = int(max_mb) * 1024 * 1024
+    compressed_size = max(src.stat().st_size, 1)
     dest.parent.mkdir(parents=True, exist_ok=True)
     temporary = dest.with_name(dest.name + ".tmp")
     total = 0
@@ -187,7 +189,7 @@ def gunzip_file(src: Path, dest: Path, max_mb: int) -> Path:
                 if not chunk:
                     break
                 total += len(chunk)
-                if total > cap:
+                if total > cap or total > compressed_size * 100:
                     raise SecurityError(
                         "Gzip decompressed size exceeded the configured cap",
                         "use a gzip file within the configured size limit",
