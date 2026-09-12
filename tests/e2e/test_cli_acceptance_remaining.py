@@ -97,7 +97,7 @@ def test_convert_sigint_returns_130_and_cleans_atomic_temps(tmp_path: Path) -> N
     source = tmp_path / "paper.tex"
     output = tmp_path / "paper.html"
     source.write_text("fixture", encoding="utf-8")
-    script = r'''
+    script = r"""
 import threading
 from pathlib import Path
 
@@ -121,7 +121,7 @@ def blocking(*_args):
 
 select.run_plan = blocking
 cli.main(["convert", str(source), "-o", os.environ["PAPERDECK_TEST_OUTPUT"]])
-'''
+"""
     env = {
         **os.environ,
         "PAPERDECK_TEST_SOURCE": str(source),
