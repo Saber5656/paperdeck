@@ -328,6 +328,11 @@ class Asset(IRModel):
 
 
 class Document(IRModel):
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={"$id": "https://github.com/Saber5656/paperdeck/schema/ir-v1.json"},
+    )
     schema_version: Literal["1"] = "1"
     source: Source
     provenance: Provenance
