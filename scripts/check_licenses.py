@@ -19,6 +19,14 @@ from typing import Any
 ALLOWLIST = frozenset(
     {"MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC", "Python-2.0", "PSF-2.0"}
 )
+# Existing httpx CA-data dependency; unmodified, separately installed distribution.
+# Scope and upstream source are documented in docs/DEPENDENCY_LICENSES.md.
+PACKAGE_EXCEPTIONS = {
+    "certifi": {"MPL-2.0", "Mozilla Public License 2.0 (MPL 2.0)"},
+}
+REVIEWED_BINARY_LICENSES = {
+    ("pypdfium2", "5.13.0"): "BSD-3-Clause, Apache-2.0, dependency licenses",
+}
 
 
 def _name(row: Mapping[str, Any]) -> str:
@@ -59,7 +67,22 @@ def check_licenses(
     notices: list[Mapping[str, Any]] = []
     for row in rows:
         package = _name(row)
-        if _allowed_parts(_license(row)) & ALLOWLIST:
+        value = _license(row)
+        if value in PACKAGE_EXCEPTIONS.get(package.lower(), set()):
+            continue
+        if REVIEWED_BINARY_LICENSES.get((package.lower(), str(row.get("Version", "")))) == value:
+            continue
+        # Every conjunct must be permitted; an OR offers an independent choice.
+        # Nested SPDX expressions require review rather than permissive guessing.
+        nested = ("(" in value or ")" in value) and re.search(r"\b(?:AND|OR)\b", value)
+        allowed = not nested and any(
+            all(
+                _allowed_parts(part) & ALLOWLIST
+                for part in re.split(r"\s+AND\s+|[,;|/]", alternative, flags=re.IGNORECASE)
+            )
+            for alternative in re.split(r"\s+OR\s+", value, flags=re.IGNORECASE)
+        )
+        if allowed:
             continue
         runtime_names = {item.lower() for item in runtime_packages} if runtime_packages else set()
         if runtime_packages is None or package.lower() in runtime_names:
