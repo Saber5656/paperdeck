@@ -163,3 +163,44 @@ def test_kitchen_sink_nested_nodes_and_repeated_footnotes():
     assert validate_html(html) == []
     assert soup.select_one('th[scope="col"][colspan="2"]')
     assert all(soup.select_one(a["href"]) for a in soup.select('a[href^="#"]'))
+
+
+def test_abstract_equation_assets_are_protected_from_budget_dropping():
+    doc = document()
+    asset = Asset(
+        id="shared",
+        mime="image/png",
+        data_b64=base64.b64encode(b"x" * 2_000_000).decode(),
+        origin=AssetOrigin(engine="pdf"),
+    )
+    doc = doc.model_copy(
+        update={
+            "assets": {"shared": asset},
+            "meta": doc.meta.model_copy(
+                update={
+                    "abstract": [
+                        Equation(
+                            id="eq-2",
+                            content_kind="image",
+                            asset_id="shared",
+                            latex_verified=False,
+                        )
+                    ]
+                }
+            ),
+            "body": [Figure(id="fig-1", asset_id="shared", caption=[])],
+        }
+    )
+    settings = load_settings(None, {})
+    settings = settings.model_copy(
+        update={
+            "limits": settings.limits.model_copy(
+                update={
+                    "embed_warn_mb": 1,
+                    "embed_hard_max_mb": 2,
+                }
+            )
+        }
+    )
+    with pytest.raises(ConversionError, match="size limit"):
+        build_bundle(doc, settings)

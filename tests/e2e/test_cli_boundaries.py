@@ -32,6 +32,7 @@ def test_cli_writes_report_force_matrix_and_stdout(fixture_engine):
     report = json.loads(Path(str(output) + ".report.json").read_text())
     assert report["output"]["bytes"] == output.stat().st_size
     assert report["engine"] == "latex"
+    assert report["versions"]["katex"]
     assert not list(output.parent.glob("*.tmp"))
     assert CliRunner().invoke(cli.main, args).exit_code == 10
     assert CliRunner().invoke(cli.main, args + ["--force"]).exit_code == 0
