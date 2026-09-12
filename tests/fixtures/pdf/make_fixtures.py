@@ -1,4 +1,5 @@
 """Generate small PDF fixtures during tests; no binary fixtures are committed."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 
 def make_fixtures(directory: Path) -> dict[str, Path]:
     from reportlab.pdfgen import canvas
+
     directory.mkdir(parents=True, exist_ok=True)
     text_pdf = directory / "two-page.pdf"
     doc = canvas.Canvas(str(text_pdf), pagesize=(612, 792))

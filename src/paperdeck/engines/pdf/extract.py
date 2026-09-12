@@ -1,4 +1,5 @@
 """Bounded pypdfium2 PDF extraction and Pillow-free bitmap cropping."""
+
 from __future__ import annotations
 
 import struct
@@ -9,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import pypdfium2 as pdfium
+import pypdfium2 as pdfium  # type: ignore[import-untyped]
 
 from ...errors import ConversionError, InputError
 
@@ -35,9 +36,19 @@ def encode_png_rgb(width: int, height: int, pixels: bytes) -> bytes:
     raw = b"".join(b"\0" + pixels[row * width * 3 : (row + 1) * width * 3] for row in range(height))
 
     def chunk(kind: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+        )
 
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
 
 
 class PageBitmap:
@@ -51,9 +62,17 @@ class PageBitmap:
     def _rgb(self) -> bytes:
         bitmap = self._bitmap
         if hasattr(bitmap, "to_numpy"):
-            arr = bitmap.to_numpy()
-            channels = int(getattr(arr, "shape", [0, 0, 3])[-1])
-            return bytes(arr[:, :, :3].astype("uint8").tobytes()) if channels >= 3 else bytes(arr.tobytes())
+            try:
+                arr = bitmap.to_numpy()
+                channels = int(getattr(arr, "shape", [0, 0, 3])[-1])
+                return (
+                    bytes(arr[:, :, :3].astype("uint8").tobytes())
+                    if channels >= 3
+                    else bytes(arr.tobytes())
+                )
+            except ImportError:
+                # numpy is optional; use pdfium's contiguous buffer below.
+                pass
         raw = bytes(getattr(bitmap, "buffer", bitmap))
         channels = int(getattr(bitmap, "n_channels", 4) or 4)
         if channels == 3:
@@ -72,7 +91,9 @@ class PageBitmap:
         right = min(self.width / self.scale, right + pad_pt) * self.scale
         # The only PDF-to-raster y-axis conversion in the engine.
         top_px = max(0.0, (self.height / self.scale - top - pad_pt) * self.scale)
-        bottom_px = min(float(self.height), (self.height / self.scale - bottom + pad_pt) * self.scale)
+        bottom_px = min(
+            float(self.height), (self.height / self.scale - bottom + pad_pt) * self.scale
+        )
         x0, x1 = max(0, int(left)), min(self.width, int(right + 0.999))
         y0, y1 = max(0, int(top_px)), min(self.height, int(bottom_px + 0.999))
         if x1 <= x0 or y1 <= y0:
@@ -92,7 +113,7 @@ class PageBitmap:
             if close:
                 close()
 
-    def __enter__(self) -> "PageBitmap":
+    def __enter__(self) -> PageBitmap:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -112,12 +133,24 @@ class PdfDoc:
             self._document = pdfium.PdfDocument(str(self.path))
         except Exception as exc:
             detail = str(exc).lower()
-            code = "pdf-encrypted" if any(word in detail for word in ("password", "encrypt", "security")) else "pdf-unreadable"
-            hint = "Provide an unencrypted PDF." if code == "pdf-encrypted" else "Check that the PDF is complete and readable."
+            code = (
+                "pdf-encrypted"
+                if any(word in detail for word in ("password", "encrypt", "security"))
+                else "pdf-unreadable"
+            )
+            hint = (
+                "Provide an unencrypted PDF."
+                if code == "pdf-encrypted"
+                else "Check that the PDF is complete and readable."
+            )
             raise InputError("Unable to open PDF", hint, code) from exc
         if self.page_count > int(limits.max_pdf_pages):
             self.close()
-            raise InputError("PDF has too many pages", "Reduce the PDF or increase max_pdf_pages.", "pdf-too-many-pages")
+            raise InputError(
+                "PDF has too many pages",
+                "Reduce the PDF or increase max_pdf_pages.",
+                "pdf-too-many-pages",
+            )
 
     @property
     def page_count(self) -> int:
@@ -147,7 +180,9 @@ class PdfDoc:
                 box = tuple(float(value) for value in textpage.get_charbox(idx))
                 if len(box) != 4 or box[2] <= box[0] or box[3] <= box[1]:
                     continue
-                chars.append(Char(unicodedata.normalize("NFC", str(text)), box, max(0.1, box[3] - box[1])))
+                chars.append(
+                    Char(unicodedata.normalize("NFC", str(text)), box, max(0.1, box[3] - box[1]))
+                )
             width, height = self.page_size(page_i)
             self._char_pages[page_i] = PageChars(page_i, chars, width, height)
             close = getattr(textpage, "close", None)
@@ -162,7 +197,11 @@ class PdfDoc:
             warning = f"pdf-page-failed:{page_i}"
             self.warnings.append(warning)
             if self._failed_pages / max(1, self.page_count) > 0.10:
-                raise ConversionError("PDF contains too many unreadable pages", "Repair the PDF and retry.", "pdf-too-broken") from exc
+                raise ConversionError(
+                    "PDF contains too many unreadable pages",
+                    "Repair the PDF and retry.",
+                    "pdf-too-broken",
+                ) from exc
             return []
 
     def page_chars(self, page_i: int) -> PageChars:
@@ -201,7 +240,7 @@ class PdfDoc:
                 close()
             self._document = None
 
-    def __enter__(self) -> "PdfDoc":
+    def __enter__(self) -> PdfDoc:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -214,7 +253,11 @@ def open_pdf(path: Path, limits: Any) -> PdfDoc:
     except OSError as exc:
         raise InputError("PDF cannot be read", "Check the input path.", "pdf-unreadable") from exc
     if size > int(limits.max_input_mb) * 1024 * 1024:
-        raise InputError("PDF exceeds input size limit", "Reduce the PDF or increase max_input_mb.", "pdf-too-large")
+        raise InputError(
+            "PDF exceeds input size limit",
+            "Reduce the PDF or increase max_input_mb.",
+            "pdf-too-large",
+        )
     return PdfDoc(Path(path), limits)
 
 

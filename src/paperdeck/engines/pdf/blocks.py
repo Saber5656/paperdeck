@@ -1,4 +1,7 @@
 """Deterministic PDF character clustering; intentionally independent of pdfium."""
+# The local flush closure intentionally captures the per-page accumulator.
+# ruff: noqa: B023
+
 from __future__ import annotations
 
 import re
@@ -48,22 +51,30 @@ class _Line:
         return statistics.median(float(c.font_size) for c in self.chars)
 
 
-def _overlap_ratio(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+def _overlap_ratio(
+    a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+) -> float:
     overlap = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
     return overlap / max(1e-9, min(a[3] - a[1], b[3] - b[1]))
 
 
 def chars_to_lines(chars: list[Any]) -> list[_Line]:
     lines: list[_Line] = []
-    for char in sorted(chars, key=lambda c: (-float(c.bbox[3]), float(c.bbox[0]), float(c.bbox[1]))):
-        candidate = next((line for line in lines if _overlap_ratio(line.bbox, char.bbox) >= 0.5), None)
+    for char in sorted(
+        chars, key=lambda c: (-float(c.bbox[3]), float(c.bbox[0]), float(c.bbox[1]))
+    ):
+        candidate = next(
+            (line for line in lines if _overlap_ratio(line.bbox, char.bbox) >= 0.5), None
+        )
         if candidate is None:
-            candidate = _Line([], tuple(float(x) for x in char.bbox))
+            candidate = _Line([], tuple(float(x) for x in char.bbox[:4]))  # type: ignore[arg-type]
             lines.append(candidate)
         candidate.chars.append(char)
         candidate.bbox = (
-            min(candidate.bbox[0], char.bbox[0]), min(candidate.bbox[1], char.bbox[1]),
-            max(candidate.bbox[2], char.bbox[2]), max(candidate.bbox[3], char.bbox[3]),
+            min(candidate.bbox[0], char.bbox[0]),
+            min(candidate.bbox[1], char.bbox[1]),
+            max(candidate.bbox[2], char.bbox[2]),
+            max(candidate.bbox[3], char.bbox[3]),
         )
     return sorted(lines, key=lambda line: (-line.bbox[3], line.bbox[0]))
 
@@ -87,7 +98,9 @@ def detect_columns(lines: list[_Line], page_width: float) -> tuple[list[list[_Li
             if (idx - start) * 8 >= 24:
                 runs.append((start, idx - 1))
             start = None
-    central = [run for run in runs if page_width * 0.30 <= (run[0] + run[1] + 1) * 4 <= page_width * 0.70]
+    central = [
+        run for run in runs if page_width * 0.30 <= (run[0] + run[1] + 1) * 4 <= page_width * 0.70
+    ]
     if not central:
         return [sorted(lines, key=lambda x: (-x.bbox[3], x.bbox[0]))], None
     valley = (central[0][0] + central[0][1] + 1) * 4
@@ -103,7 +116,9 @@ def _norm_runner(text: str) -> str:
     return re.sub(r"\d+", "#", " ".join(text.split()).casefold())
 
 
-def strip_repeated(pages: list[Any], lines_by_page: list[list[_Line]]) -> tuple[list[list[_Line]], list[str]]:
+def strip_repeated(
+    pages: list[Any], lines_by_page: list[list[_Line]]
+) -> tuple[list[list[_Line]], list[str]]:
     if len(pages) < 4:
         return lines_by_page, []
     candidates: dict[tuple[str, int], set[int]] = {}
@@ -130,35 +145,68 @@ def build_blocks(pages: list[Any]) -> list[RawBlock]:
     line_lists = [chars_to_lines(list(getattr(page, "chars", page))) for page in pages]
     line_lists, warnings = strip_repeated(pages, line_lists)
     blocks: list[RawBlock] = []
-    for page, lines in zip(pages, line_lists):
+    for page, lines in zip(pages, line_lists, strict=True):
         page_idx = int(getattr(page, "page", len(blocks)))
         width = float(getattr(page, "width", max((line.bbox[2] for line in lines), default=0)))
         columns, _ = detect_columns(lines, width)
         ordered_lines = [line for col in columns for line in col]
-        median_height = statistics.median([line.height for line in ordered_lines]) if ordered_lines else 10.0
+        median_height = (
+            statistics.median([line.height for line in ordered_lines]) if ordered_lines else 10.0
+        )
         current: list[_Line] = []
         page_blocks: list[RawBlock] = []
-        def flush() -> None:
+
+        def flush() -> None:  # noqa: B023
             if not current:
                 return
             chars = [char for line in current for char in line.chars]
-            bbox = (min(line.bbox[0] for line in current), min(line.bbox[1] for line in current), max(line.bbox[2] for line in current), max(line.bbox[3] for line in current))
+            bbox = (
+                min(line.bbox[0] for line in current),
+                min(line.bbox[1] for line in current),
+                max(line.bbox[2] for line in current),
+                max(line.bbox[3] for line in current),
+            )
             text = "\n".join(line.text for line in current if line.text)
             if text:
-                page_blocks.append(RawBlock("", page_idx, bbox, text, statistics.median(float(c.font_size) for c in chars), len(current), 0, median_height))
+                page_blocks.append(
+                    RawBlock(
+                        "",
+                        page_idx,
+                        bbox,
+                        text,
+                        statistics.median(float(c.font_size) for c in chars),
+                        len(current),
+                        0,
+                        median_height,
+                    )
+                )
             current.clear()
+
         previous: _Line | None = None
         for line in ordered_lines:
             if previous is not None:
                 gap = previous.bbox[1] - line.bbox[3]
-                jump = abs(line.font_size - previous.font_size) > 0.25 * max(line.font_size, previous.font_size)
+                jump = abs(line.font_size - previous.font_size) > 0.25 * max(
+                    line.font_size, previous.font_size
+                )
                 if gap > 1.8 * median_height or jump:
                     flush()
             current.append(line)
             previous = line
         flush()
         for idx, block in enumerate(page_blocks):
-            blocks.append(RawBlock(f"b{page_idx}-{idx}", block.page, block.bbox, block.text, block.font_size_median, block.line_count, block.column, block.line_height_median))
+            blocks.append(
+                RawBlock(
+                    f"b{page_idx}-{idx}",
+                    block.page,
+                    block.bbox,
+                    block.text,
+                    block.font_size_median,
+                    block.line_count,
+                    block.column,
+                    block.line_height_median,
+                )
+            )
     return blocks
 
 

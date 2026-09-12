@@ -1,4 +1,5 @@
 """Schema registry for the paperdeck LLM protocol."""
+
 from __future__ import annotations
 
 from typing import TypeAlias
@@ -29,5 +30,9 @@ def get(name: str) -> tuple[SchemaModel, str]:
 
 
 __all__ = [
-    "PdfBibV1", "PdfCiteMapV1", "PdfEquationLatexV1", "PdfSegmentV1", "get",
+    "PdfBibV1",
+    "PdfCiteMapV1",
+    "PdfEquationLatexV1",
+    "PdfSegmentV1",
+    "get",
 ]
