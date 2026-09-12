@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from ...errors import ConversionError
 from ...llm.cache import LlmCache
 from ...llm.client import LlmClient
 from ...llm.cost import Ledger, estimate_pdf_run
+from ...netgate import NetGate
 from .assemble import assemble_pdf
 from .blocks import build_blocks
 from .citations import extract_bibliography
@@ -21,38 +24,64 @@ class PdfEngine:
     name = "pdf"
 
     def available(self, ctx: Any) -> tuple[bool, str]:
-        path = getattr(ctx.spec, "path", None)
-        if path is None or not Path(path).exists():
-            return False, "pdf-artifact-missing"
-        host = str(ctx.settings.llm.base_url).lower()
-        if (
-            not ctx.settings.resolve_api_key()
-            and "localhost" not in host
-            and "127.0.0.1" not in host
-        ):
+        kind = getattr(ctx.spec, "kind", None)
+        if kind == "pdf-local":
+            path = getattr(ctx.spec, "path", None)
+            if path is None or not Path(path).exists():
+                return False, "pdf-artifact-missing"
+        elif kind == "arxiv":
+            if not getattr(ctx.spec, "arxiv_id", None):
+                return False, "arxiv-id-missing"
+        else:
+            return False, "pdf-input-kind"
+        host = (urlparse(str(ctx.settings.llm.base_url)).hostname or "").lower()
+        if not ctx.settings.resolve_api_key() and host not in {"localhost", "127.0.0.1", "::1"}:
             return False, "llm-not-configured"
         return True, "available"
 
     def convert(self, ctx: Any) -> Any:
-        path = Path(getattr(ctx.spec, "path", ctx.spec))
+        path = getattr(ctx.spec, "path", None)
+        source = None
+        if getattr(ctx.spec, "kind", None) == "arxiv":
+            from ...input.arxiv import ArxivClient
+
+            netgate = getattr(ctx, "netgate", None)
+            if netgate is None:
+                netgate = NetGate(ctx.settings)
+            arxiv = ArxivClient(netgate, ctx.cache)
+            meta = arxiv.metadata(ctx.spec.arxiv_id, ctx.spec.version)
+            version = ctx.spec.version or meta.resolved_version
+            path = arxiv.pdf(meta.id, version)
+            from ...ir.model import Source
+
+            source = Source(
+                kind="arxiv",
+                original=ctx.spec.original or meta.abs_url,
+                arxiv_id=meta.id,
+                version=f"v{version}",
+            )
+        if path is None:
+            raise ConversionError(
+                "PDF input path is missing",
+                "Provide a local PDF or an arXiv identifier.",
+                "pdf-input-missing",
+            )
+        path = Path(path)
         with open_pdf(path, ctx.settings.limits) as pdfdoc:
             pages = [pdfdoc.page_chars(index) for index in range(pdfdoc.page_count)]
             blocks = build_blocks(pages)
             char_count = sum(len(block.text) for block in blocks)
-            estimate = estimate_pdf_run(pdfdoc.page_count, char_count, 0, ctx.settings)
+            equation_count = sum(
+                1 for block in blocks if re.search(r"(?:=|∫|∑|\\(?:frac|begin|sum))", block.text)
+            )
+            estimate = estimate_pdf_run(pdfdoc.page_count, char_count, equation_count, ctx.settings)
             if not ctx.confirm_cost(estimate):
                 raise ConversionError(
                     "LLM cost estimate was declined",
                     "Re-run with cost confirmation to use the PDF engine.",
                     "cost-declined",
                 )
-            try:
-                import importlib
-
-                module = importlib.import_module("paperdeck.netgate")
-                netgate = module.NetGate(ctx.settings)
-            except Exception:
-                netgate = getattr(ctx, "netgate", None)
+            netgate = getattr(ctx, "netgate", None) or NetGate(ctx.settings)
             cache = (
                 LlmCache(ctx.cache, enabled=bool(ctx.settings.llm.cache))
                 if ctx.cache is not None
@@ -60,7 +89,7 @@ class PdfEngine:
             )
             ledger = Ledger(ctx.settings)
             llm = LlmClient(ctx.settings, netgate, cache=cache, on_usage=ledger.record)
-            seg = segment(blocks, llm)
+            seg = segment(blocks, llm, ledger=ledger)
             equations = process_equations(seg, blocks, pdfdoc, llm, ledger, _Allocator())
             bib_blocks = [
                 block
@@ -72,7 +101,19 @@ class PdfEngine:
                 if bib_blocks
                 else ([], {}, [], ["pdf-bib-empty"])
             )
+            document = assemble_pdf(
+                seg,
+                blocks,
+                equations,
+                bib,
+                pdfdoc,
+                ctx.settings,
+                source=source,
+                llm=llm,
+                ledger=ledger,
+            )
             from ...ir.model import LlmProvenance
+
             records = ledger.records
             usage_in = sum(int(item["usage"].get("prompt_tokens", 0) or 0) for item in records)
             usage_out = sum(int(item["usage"].get("completion_tokens", 0) or 0) for item in records)
@@ -84,17 +125,16 @@ class PdfEngine:
                 tokens_out=usage_out,
                 cost_usd=float(ledger.spent_usd() or 0.0),
             )
-            return assemble_pdf(
-                seg,
-                blocks,
-                equations,
-                bib,
-                pdfdoc,
-                ctx.settings,
-                source=getattr(ctx.spec, "source", None),
-                llm=llm,
-                llm_provenance=llm_provenance,
+            ctx.run_metrics.update(
+                {
+                    "estimated_usd": estimate.usd,
+                    "actual_cost_usd": ledger.spent_usd(),
+                    "cache_hits": ledger.cache_hits,
+                    "calls": len(records),
+                }
             )
+            provenance = document.provenance.model_copy(update={"llm": llm_provenance})
+            return document.model_copy(update={"provenance": provenance})
 
 
 class _Allocator:

@@ -99,3 +99,18 @@ def test_pdf_engine_declined_cost_does_not_call_model(tmp_path: Path) -> None:
         assert FakeChatHandler.calls == 0
     finally:
         server.shutdown()
+
+
+def test_pdf_available_rejects_wrong_kind_and_accepts_arxiv_without_path(tmp_path: Path) -> None:
+    settings = load_settings(None, {"llm.base_url": "http://localhost:11434/v1"})
+    engine = PdfEngine()
+    local = EngineContext(
+        InputSpec("latex-local", path=tmp_path / "missing.pdf", original="x"),
+        settings, CacheManager(tmp_path / "cache"), tmp_path, lambda _: True
+    )
+    assert engine.available(local) == (False, "pdf-input-kind")
+    arxiv = EngineContext(
+        InputSpec("arxiv", arxiv_id="2401.12345", version=1, original="2401.12345v1"),
+        settings, CacheManager(tmp_path / "cache2"), tmp_path, lambda _: True
+    )
+    assert engine.available(arxiv) == (True, "available")

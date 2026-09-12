@@ -62,6 +62,7 @@ def assemble_pdf(
     source: Any = None,
     llm_provenance: Any = None,
     llm: Any = None,
+    ledger: Any = None,
 ) -> Any:
     from ...ir.model import (
         Document,
@@ -83,7 +84,7 @@ def assemble_pdf(
     ]
     paragraph_texts = [block.text for block in paragraph_blocks]
     paragraph_sources = {block.id: block.text for block in paragraph_blocks}
-    cite_splices = link_citations(paragraph_texts, bibliography, llm)
+    cite_splices = link_citations(paragraph_texts, bibliography, llm, ledger)
     numbers_map: dict[tuple[str, str], str] = {}
     for _block_id, draft in eq_result.equations.items():
         numbers_map[("eq", draft.number)] = draft.anchor_id

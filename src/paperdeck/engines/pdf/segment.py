@@ -101,7 +101,7 @@ def _merge_paragraphs(
     return result
 
 
-def segment(blocks: list[RawBlock], llm: Any) -> SegmentResult:
+def segment(blocks: list[RawBlock], llm: Any, ledger: Any = None) -> SegmentResult:
     if not blocks:
         return SegmentResult({}, [], [], [])
     pages = sorted({block.page for block in blocks})
@@ -126,7 +126,7 @@ def segment(blocks: list[RawBlock], llm: Any) -> SegmentResult:
             {"role": "system", "content": "You are a document structure classifier."},
             {"role": "user", "content": load_prompt("segment", blocks=serialized)},
         ]
-        response = llm.complete("segment", messages, PdfSegmentV1, max_tokens=8192)
+        response = llm.complete("segment", messages, PdfSegmentV1, max_tokens=8192, ledger=ledger)
         for attempt in range(2):
             returned = [entry.id for entry in response.blocks]
             missing = sorted(set(input_ids) - set(returned))
@@ -145,7 +145,9 @@ def segment(blocks: list[RawBlock], llm: Any) -> SegmentResult:
                 f"duplicated={duplicate}. Classify every input id exactly once."
             )
             messages.append({"role": "user", "content": feedback})
-            response = llm.complete("segment", messages, PdfSegmentV1, max_tokens=8192)
+            response = llm.complete(
+                "segment", messages, PdfSegmentV1, max_tokens=8192, ledger=ledger
+            )
         for entry in response.blocks:
             if entry.id not in input_ids:
                 continue
