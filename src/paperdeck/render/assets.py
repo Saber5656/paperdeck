@@ -43,6 +43,7 @@ class AssetsBundle:
     dropped: list[DroppedAsset]
     total_embedded_bytes: int
     data_json: str
+    katex_version: str
 
 
 def build_bundle(doc: Document, settings: Settings) -> AssetsBundle:
@@ -102,16 +103,19 @@ def build_bundle(doc: Document, settings: Settings) -> AssetsBundle:
     )
     if total > settings.limits.embed_warn_mb * 1024 * 1024:
         logger.warning("Embedded content exceeds the configured warning size.")
+    asset_blocks = list(iter_blocks(doc))
+    if doc.meta.abstract:
+        asset_blocks.extend(
+            iter_blocks(doc.model_copy(update={"body": doc.meta.abstract, "footnotes": []}))
+        )
     protected = {
-        block.asset_id
-        for block in iter_blocks(doc)
-        if isinstance(block, Equation) and block.asset_id
+        block.asset_id for block in asset_blocks if isinstance(block, Equation) and block.asset_id
     }
     dropped: list[DroppedAsset] = []
     for kind in (Figure, Table):
         candidates = {
             block.asset_id
-            for block in iter_blocks(doc)
+            for block in asset_blocks
             if isinstance(block, kind) and block.asset_id and block.asset_id not in protected
         }
         for asset_id in sorted(candidates, key=lambda key: (-sizes.get(key, 0), key)):
@@ -141,4 +145,5 @@ def build_bundle(doc: Document, settings: Settings) -> AssetsBundle:
         dropped,
         total,
         data_json,
+        str(json.loads((vendor / "MANIFEST.json").read_text())["version"]),
     )

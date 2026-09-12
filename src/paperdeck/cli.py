@@ -167,6 +167,7 @@ def convert(
             progress("rendering…")
             stage = time.monotonic()
             bundle = build_bundle(doc, settings)
+            report.versions["katex"] = bundle.katex_version
             html = render_document(doc, bundle, settings)
             report.timings_ms["render"] = (time.monotonic() - stage) * 1000
             progress("validating…")

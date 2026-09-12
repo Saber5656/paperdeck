@@ -59,6 +59,7 @@ def test_convert_with_real_latex(tmp_path):
     assert result.stderr == ""
     report = json.loads(Path(str(output) + ".report.json").read_text())
     assert report["engine"] == "latex"
+    assert report["versions"]["katex"]
     assert report["llm"]["calls"] == 0
     assert report["output"]["bytes"] == output.stat().st_size
     assert {"resolve", "convert", "render", "validate", "write"} <= report["timings_ms"].keys()
