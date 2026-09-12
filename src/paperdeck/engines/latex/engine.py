@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import tempfile
@@ -13,7 +14,16 @@ from paperdeck.errors import ConversionError
 from paperdeck.input.arxiv import ArxivClient, ArxivMeta
 from paperdeck.input.tarsafe import extract_tar, gunzip_file, sniff_kind
 from paperdeck.ir.anchors import AnchorAllocator
-from paperdeck.ir.model import Document, Meta, Paragraph, Provenance, Source, Text, Warning
+from paperdeck.ir.model import (
+    Document,
+    Meta,
+    MetaLink,
+    Paragraph,
+    Provenance,
+    Source,
+    Text,
+    Warning,
+)
 from paperdeck.ir.validate import validate_document
 from paperdeck.netgate import NetGate
 
@@ -25,6 +35,17 @@ from .macros import extract_macros
 from .pandoc import pandoc_version, run_pandoc
 from .project import prepare
 from .refs import resolve_references
+
+
+def _created_at() -> str:
+    """Return a timestamp, honoring deterministic test time only under pytest."""
+    fake = os.environ.get("PAPERDECK_FAKE_NOW")
+    if fake and os.environ.get("PYTEST_CURRENT_TEST"):
+        try:
+            return datetime.fromisoformat(fake).isoformat()
+        except ValueError:
+            pass
+    return datetime.now(UTC).isoformat()
 
 
 def _acquire_source(ctx: EngineContext, staging: Path) -> tuple[Path, ArxivMeta | None]:
@@ -131,6 +152,14 @@ class LatexEngine:
                             content=[Text(text=source_meta.abstract)],
                         )
                     ]
+            links: list[MetaLink] = []
+            if source_meta is not None:
+                links.append(MetaLink(url=source_meta.abs_url, kind="arxiv"))
+                if source_meta.doi:
+                    doi_url = source_meta.doi
+                    if not doi_url.startswith(("http://", "https://")):
+                        doi_url = f"https://doi.org/{doi_url}"
+                    links.append(MetaLink(url=doi_url, kind="doi"))
             document = Document(
                 source=(
                     Source(
@@ -145,14 +174,14 @@ class LatexEngine:
                 provenance=Provenance(
                     engine=self.name,
                     engine_versions={"pandoc": f"{result.version[0]}.{result.version[1]}"},
-                    created_at=datetime.now(UTC).isoformat(),
+                    created_at=_created_at(),
                     fallbacks=[],
                 ),
                 meta=Meta(
                     title=title,
                     authors=authors,
                     abstract=abstract,
-                    links=[],
+                    links=links,
                 ),
                 macros=macros,
                 body=mapped.body,

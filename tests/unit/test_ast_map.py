@@ -50,3 +50,61 @@ def test_ast_map_note_and_malformed_nodes_degrade_without_crashing() -> None:
     assert mapped.footnotes and mapped.footnotes[0].number == "1"
     assert mapped.body[0].type == "paragraph"
     assert any(w.code == "pandoc-node-malformed:Header" for w in mapped.warnings)
+
+
+def test_ast_map_handles_supported_inline_and_block_nodes() -> None:
+    inline = [
+        {"t": "Str", "c": "text"},
+        {"t": "Space"},
+        {"t": "Emph", "c": [{"t": "Str", "c": "e"}]},
+        {"t": "Strong", "c": [{"t": "Str", "c": "s"}]},
+        {"t": "Subscript", "c": [{"t": "Str", "c": "sub"}]},
+        {"t": "Superscript", "c": [{"t": "Str", "c": "sup"}]},
+        {"t": "Code", "c": [["", [], []], "code"]},
+        {"t": "Math", "c": [{"t": "InlineMath"}, "x"]},
+        {"t": "LineBreak"},
+        {"t": "Link", "c": [["", [], []], [{"t": "Str", "c": "link"}], ["https://x", ""]]},
+        {"t": "Link", "c": [["", [], []], [{"t": "Str", "c": "bad"}], ["javascript:x", ""]]},
+        {"t": "Cite", "c": [[{"citationId": "k"}], [{"t": "Str", "c": "cite"}]]},
+        {"t": "RawInline", "c": ["latex", r"\ref{x}"]},
+        {"t": "RawInline", "c": ["html", "<i>x</i>"]},
+    ]
+    ast = {
+        "blocks": [
+            {"t": "Header", "c": [1, ["", [], []], [{"t": "Str", "c": "H"}]]},
+            {"t": "Para", "c": inline},
+            {"t": "CodeBlock", "c": [["", ["python"], []], "print(1)"]},
+            {"t": "BlockQuote", "c": [{"t": "Plain", "c": [{"t": "Str", "c": "q"}]}]},
+            {"t": "BulletList", "c": [[{"t": "Plain", "c": [{"t": "Str", "c": "b"}]}]]},
+            {
+                "t": "OrderedList",
+                "c": [
+                    [1, {"t": "Decimal"}, {"t": "Period"}],
+                    [{"t": "Plain", "c": [{"t": "Str", "c": "o"}]}],
+                ],
+            },
+            {
+                "t": "Div",
+                "c": [
+                    ["", ["abstract"], []],
+                    [{"t": "Plain", "c": [{"t": "Str", "c": "abstract"}]}],
+                ],
+            },
+            {
+                "t": "Div",
+                "c": [["", ["box"], []], [{"t": "Plain", "c": [{"t": "Str", "c": "div"}]}]],
+            },
+            {"t": "RawBlock", "c": ["latex", r"\appendix"]},
+            {"t": "RawBlock", "c": ["html", "<script>x</script>"]},
+            {"t": "SmallCaps", "c": [{"t": "Str", "c": "unknown"}]},
+        ],
+        "meta": {},
+    }
+    mapped = map_ast(ast, AnchorAllocator())
+    assert mapped.meta_abstract and mapped.raw_spans
+    section = mapped.body[0]
+    assert section.type == "section"
+    paragraph = section.children[0]
+    assert paragraph.type == "paragraph"
+    assert any(item.type == "ext_link" for item in paragraph.content)
+    assert any(item.code == "invalid-link-scheme" for item in mapped.warnings)

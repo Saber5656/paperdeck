@@ -1,0 +1,6 @@
+{
+  "title": "Equation Golden",
+  "sections": ["1 Results"],
+  "equations": ["(1)", "(2)", null, "(3)"],
+  "has_csp": true
+}

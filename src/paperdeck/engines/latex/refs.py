@@ -51,6 +51,11 @@ _START = "\ue000"
 _END = "\ue001"
 _REFS = {"ref", "eqref", "cref", "Cref", "autoref"}
 _CITES = {"cite", "citep", "citet", "citealp", "citealt", "citeauthor", "citeyear"}
+_STRUCTURAL_TEX = re.compile(
+    r"^\s*\\(?:maketitle\b|bibliographystyle(?:\[[^]]*\])?\s*\{[^{}]*\}|"
+    r"begin\s*\{thebibliography\}\s*\{[^{}]*\}|end\s*\{thebibliography\})\s*$",
+    re.DOTALL,
+)
 
 
 def read_group(text: str, index: int) -> tuple[str | None, int]:
@@ -330,6 +335,8 @@ def _directive_inlines(
             )
             result.append(FootnoteRef(target_id=foot_id, number=number))
         elif isinstance(directive, OtherTex):
+            if _STRUCTURAL_TEX.fullmatch(directive.tex):
+                continue
             warnings.append(
                 Warning(
                     code=f"raw-tex-dropped:{_safe_fragment(directive.tex)}",
@@ -447,7 +454,17 @@ def resolve_references(doc: Any, labels: dict[str, str], bib_index: dict[str, An
         doc.meta_abstract = [replace_block(block) for block in doc.meta_abstract]
     doc.labels = dict(labels)
     doc.warnings = warnings
-    if _START in str(doc.body) or _END in str(doc.body):
+
+    def contains(value: Any) -> bool:
+        if isinstance(value, str):
+            return _START in value or _END in value
+        if isinstance(value, dict):
+            return any(contains(item) for item in value.values())
+        if isinstance(value, (list, tuple, set)):
+            return any(contains(item) for item in value)
+        return False
+
+    if contains([block.model_dump() for block in doc.body]):
         raise ConversionError(
             "raw-TeX sentinel leaked into IR",
             hint="Inspect raw reference resolution.",

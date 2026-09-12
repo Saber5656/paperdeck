@@ -19,6 +19,7 @@ def _warning(code: str, message: str) -> Warning:
 def extract_macros(preamble: str) -> tuple[dict[str, str], list[Warning]]:
     macros: dict[str, str] = {}
     warnings: list[Warning] = []
+    nested_names: set[str] = set()
     for match in _COMMAND.finditer(preamble):
         command = match.group(1)
         starred = (
@@ -78,10 +79,12 @@ def extract_macros(preamble: str) -> tuple[dict[str, str], list[Warning]]:
                         continue
                 body, _ = read_group(preamble, index)
                 _ = arg_count
-        if name is None or body is None or not _NAME.fullmatch(name):
+        if name is None or body is None:
             continue
         if "@" in name:
             warnings.append(_warning(f"macro-internal:{name}", "internal macro skipped"))
+            continue
+        if not _NAME.fullmatch(name):
             continue
         if len(body) > 2000:
             warnings.append(
@@ -91,6 +94,12 @@ def extract_macros(preamble: str) -> tuple[dict[str, str], list[Warning]]:
         if _UNSAFE.search(body) or re.search(
             r"\\(?:newcommand|renewcommand|providecommand|def)", body
         ):
+            nested_names.update(
+                re.findall(
+                    r"\\(?:newcommand|renewcommand|providecommand)\s*\{(\\[A-Za-z][A-Za-z0-9]*)\}",
+                    body,
+                )
+            )
             warnings.append(_warning(f"macro-unsafe:{name}", "unsafe or nested macro skipped"))
             continue
         if len(macros) >= 500 and name not in macros:
@@ -101,4 +110,4 @@ def extract_macros(preamble: str) -> tuple[dict[str, str], list[Warning]]:
         if name in macros and command in {"newcommand", "def"}:
             warnings.append(_warning(f"macro-redefined:{name}", "macro redefined"))
         macros[name] = body
-    return macros, warnings
+    return {name: body for name, body in macros.items() if name not in nested_names}, warnings

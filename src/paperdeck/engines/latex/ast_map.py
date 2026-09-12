@@ -632,7 +632,17 @@ def _replace_by_id(blocks: list[Block], block_id: str, replacement: Block) -> bo
 
 def assert_no_sentinels(doc: Any) -> None:
     """Reject unresolved raw-TeX placeholders anywhere in an IR model."""
-    if _START in str(doc.model_dump()) or _END in str(doc.model_dump()):
+
+    def contains(value: Any) -> bool:
+        if isinstance(value, str):
+            return _START in value or _END in value
+        if isinstance(value, dict):
+            return any(contains(item) for item in value.values())
+        if isinstance(value, (list, tuple, set)):
+            return any(contains(item) for item in value)
+        return False
+
+    if contains(doc.model_dump()):
         from paperdeck.errors import ConversionError
 
         raise ConversionError(
