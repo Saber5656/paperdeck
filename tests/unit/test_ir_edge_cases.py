@@ -1,10 +1,10 @@
 import pytest
-from test_renderer import document
 
 from paperdeck.config import LimitsSettings
 from paperdeck.errors import ConversionError
 from paperdeck.ir.model import BibEntry, Figure, Meta, Paragraph, RefLink, Section, Text
 from paperdeck.ir.validate import validate_document
+from tests.fixtures.reader import document
 
 
 def test_duplicate_bibliography_ids_are_rejected():

@@ -44,5 +44,6 @@ files = ["src/paperdeck"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "--strict-config --strict-markers"
 markers = ["playwright: browser integration tests", "pandoc: requires pandoc", "security: security acceptance"]
