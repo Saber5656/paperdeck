@@ -1,1 +1,1 @@
-"""Input resolution and acquisition package."""
+"""Input resolution, acquisition, and cache helpers."""
