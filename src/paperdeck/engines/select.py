@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from importlib import import_module
-from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING
 
 import click
 
@@ -15,13 +14,14 @@ from paperdeck.errors import (
     ConfigError,
     ConversionError,
     FallbackNote,
+    FetchError,
+    LlmError,
     SecurityError,
 )
 from paperdeck.input.cache import CacheManager
 from paperdeck.input.resolver import InputSpec
 from paperdeck.ir.model import Document
 from paperdeck.ir.validate import validate_document
-from paperdeck.llm.cost import CostEstimate
 from paperdeck.logsetup import progress
 
 if TYPE_CHECKING:
@@ -94,15 +94,6 @@ def plan(
     return [engine]
 
 
-def _local_base_url(settings: Any) -> bool:
-    host = urlparse(str(settings.llm.base_url)).hostname or ""
-    return host.lower() in {"localhost", "127.0.0.1", "::1"}
-
-
-def _pdf_configured(ctx: EngineContext) -> bool:
-    return bool(ctx.settings.resolve_api_key()) or _local_base_url(ctx.settings)
-
-
 def _fallback(
     engine: str,
     reason: str,
@@ -146,16 +137,24 @@ def run_plan(
                 next_engine,
             )
             continue
-        if name == "pdf" and not _pdf_configured(ctx):
-            _fallback(
-                name,
-                "llm-not-configured",
-                "configure an API key or local LLM endpoint",
-                notes,
-                next_engine,
+        try:
+            available, reason = engine.available(ctx)
+        except SecurityError:
+            raise
+        except FetchError as exc:
+            reason_code = (
+                "html-unavailable" if name == "arxiv-html" else f"convert-failed:{exc.code}"
             )
+            _fallback(name, reason_code, exc.user_message, notes, next_engine)
             continue
-        available, reason = engine.available(ctx)
+        except LlmError as exc:
+            reason_code = "llm-not-configured" if name == "pdf" else f"convert-failed:{exc.code}"
+            _fallback(name, reason_code, exc.user_message, notes, next_engine)
+            continue
+        except ConfigError as exc:
+            reason_code = "llm-not-configured" if name == "pdf" else f"convert-failed:{exc.code}"
+            _fallback(name, reason_code, exc.user_message, notes, next_engine)
+            continue
         if not available:
             _fallback(
                 name,
@@ -165,14 +164,21 @@ def run_plan(
                 next_engine,
             )
             continue
-        if name == "pdf" and not ctx.confirm_cost(CostEstimate(usd=0.0)):
-            _fallback(name, "cost-declined", "cost confirmation declined", notes, next_engine)
-            continue
         try:
             document = engine.convert(ctx)
         except SecurityError:
             raise
         except ConfigError as exc:
+            reason_code = "llm-not-configured" if name == "pdf" else f"convert-failed:{exc.code}"
+            _fallback(name, reason_code, exc.user_message, notes, next_engine)
+            continue
+        except FetchError as exc:
+            reason_code = (
+                "html-unavailable" if name == "arxiv-html" else f"convert-failed:{exc.code}"
+            )
+            _fallback(name, reason_code, exc.user_message, notes, next_engine)
+            continue
+        except LlmError as exc:
             reason_code = "llm-not-configured" if name == "pdf" else f"convert-failed:{exc.code}"
             _fallback(name, reason_code, exc.user_message, notes, next_engine)
             continue

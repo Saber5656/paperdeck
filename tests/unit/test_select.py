@@ -11,6 +11,8 @@ from paperdeck.errors import (
     AllEnginesFailedError,
     ConversionError,
     CostLimitError,
+    FetchError,
+    LlmError,
     SecurityError,
 )
 from paperdeck.input.cache import CacheManager
@@ -33,14 +35,21 @@ def _doc() -> Document:
 
 class Stub:
     def __init__(
-        self, name: str, available: tuple[bool, str] = (True, ""), error: Exception | None = None
+        self,
+        name: str,
+        available: tuple[bool, str] = (True, ""),
+        error: Exception | None = None,
+        available_error: Exception | None = None,
     ):
         self.name = name
         self._available = available
         self.error = error
+        self.available_error = available_error
         self.calls = 0
 
     def available(self, ctx: EngineContext) -> tuple[bool, str]:
+        if self.available_error:
+            raise self.available_error
         return self._available
 
     def convert(self, ctx: EngineContext) -> Document:
@@ -99,22 +108,21 @@ def test_security_error_aborts_and_exhaustion_records_notes(tmp_path: Path) -> N
     assert exc.value.attempts[0].reason_code == "no-main-tex"
 
 
-def test_pdf_cost_decline_is_recorded_before_conversion(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_pdf_cost_decline_is_recorded_by_pdf_engine(
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    pdf = Stub("pdf")
+    pdf = Stub("pdf", error=ConversionError("cost confirmation declined", "retry", "cost-declined"))
     context = EngineContext(
         InputSpec("pdf-local", path=tmp_path / "x.pdf", original="x.pdf"),
         load_settings(None, {}),
         CacheManager(tmp_path / "cache"),
         tmp_path,
-        lambda _: False,
+        lambda _: pytest.fail("selection must not confirm PDF cost"),
     )
     with pytest.raises(AllEnginesFailedError) as exc:
         run_plan(["pdf"], context, {"pdf": pdf})
     assert exc.value.attempts[0].reason_code == "cost-declined"
-    assert pdf.calls == 0
+    assert pdf.calls == 1
 
 
 def test_cost_limit_error_is_terminal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -129,3 +137,26 @@ def test_cost_limit_error_is_terminal(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     with pytest.raises(CostLimitError):
         run_plan(["pdf"], context, {"pdf": pdf})
+
+
+def test_fetch_and_llm_errors_from_availability_fall_back(tmp_path: Path) -> None:
+    first = Stub("arxiv-html", available_error=FetchError("down", "retry", "network-error"))
+    second = Stub("latex")
+    result = run_plan(
+        ["arxiv-html", "latex"],
+        _ctx(tmp_path),
+        {"arxiv-html": first, "latex": second},
+    )
+    assert result.provenance.fallbacks[0].reason_code == "html-unavailable"
+
+    llm = Stub("pdf", available_error=LlmError("no llm", "configure it", "missing-key"))
+    context = EngineContext(
+        InputSpec("pdf-local", path=tmp_path / "x.pdf", original="x.pdf"),
+        load_settings(None, {}),
+        CacheManager(tmp_path / "cache2"),
+        tmp_path,
+        lambda _: True,
+    )
+    with pytest.raises(AllEnginesFailedError) as exc:
+        run_plan(["pdf"], context, {"pdf": llm})
+    assert exc.value.attempts[0].reason_code == "llm-not-configured"
