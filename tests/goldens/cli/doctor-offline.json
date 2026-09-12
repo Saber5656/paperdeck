@@ -1,0 +1,11 @@
+{
+  "checks": [
+    {"name": "python", "status": "ok"},
+    {"name": "config", "status": "ok"},
+    {"name": "pandoc", "status": "warn"},
+    {"name": "katex-assets", "status": "ok"},
+    {"name": "api-key", "status": "warn"},
+    {"name": "cache-writable", "status": "ok"},
+    {"name": "network", "status": "warn"}
+  ]
+}
