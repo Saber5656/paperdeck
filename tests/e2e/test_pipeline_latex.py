@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import subprocess
 import tarfile
 from pathlib import Path
@@ -11,6 +12,20 @@ from bs4 import BeautifulSoup
 ROOT = Path(__file__).parents[2]
 CORPUS = ROOT / "tests" / "fixtures" / "latex"
 GOLDENS = ROOT / "tests" / "goldens" / "latex"
+
+
+def _portable_html(html: str) -> str:
+    """Normalize the one environment-dependent value in rendered HTML."""
+    return re.sub(r"(<p>pandoc )[^<]+(</p>)", r"\1VERSION\2", html)
+
+
+def _assert_or_update_golden(path: Path, html: str, update: bool) -> None:
+    normalized = _portable_html(html)
+    if update:
+        path.write_text(normalized, encoding="utf-8")
+        return
+    assert path.is_file(), f"missing HTML golden: {path}"
+    assert path.read_text(encoding="utf-8") == normalized
 
 
 def _semantic_snapshot(html: str) -> dict[str, object]:
@@ -40,7 +55,10 @@ def _extended_snapshot(html: str) -> dict[str, object]:
 
 
 @pytest.mark.pandoc
-def test_latex_corpus_cli_and_standalone_validator(tmp_path: Path) -> None:
+def test_latex_corpus_cli_and_standalone_validator(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    update_goldens = bool(request.config.getoption("--update-goldens"))
     for name in ("minimal", "equations"):
         output = tmp_path / f"{name}.html"
         environment = os.environ.copy()
@@ -73,6 +91,7 @@ def test_latex_corpus_cli_and_standalone_validator(tmp_path: Path) -> None:
         )
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == str(output)
+        _assert_or_update_golden(GOLDENS / f"{name}.html", output.read_text(), update_goldens)
         report = json.loads((Path(str(output) + ".report.json")).read_text())
         assert report["engine"] == "latex"
         assert report["llm"]["calls"] == 0
@@ -88,6 +107,15 @@ def test_latex_corpus_cli_and_standalone_validator(tmp_path: Path) -> None:
         assert standalone.returncode == 0, standalone.stdout + standalone.stderr
         expected = json.loads((GOLDENS / f"{name}.json").read_text())
         assert _semantic_snapshot(output.read_text()) == expected
+
+
+def test_html_golden_detects_content_corruption(tmp_path: Path) -> None:
+    content = (GOLDENS / "minimal.html").read_text(encoding="utf-8")
+    corrupted = content.replace("Minimal Golden", "Corrupted Golden", 1)
+    golden = tmp_path / "minimal.html"
+    golden.write_text(corrupted, encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _assert_or_update_golden(golden, content, False)
 
 
 def _seed_arxiv_cache(cache_home: Path) -> None:
