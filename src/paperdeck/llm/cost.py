@@ -133,8 +133,25 @@ class Ledger:
         with self._lock:
             return self._tokens_in + self._tokens_out
 
-    def check_budget(self, next_call_estimate_usd: float | None, *, next_tokens: int = 0) -> None:
+    def check_budget(
+        self,
+        next_call_estimate_usd: float | None,
+        *,
+        next_tokens: int = 0,
+        unknown_pricing: bool = False,
+    ) -> None:
         with self._lock:
+            if unknown_pricing or self._unknown_cost or _pricing(self.settings, self.model) is None:
+                total_tokens = (
+                    self._tokens_in + self._tokens_out + self._reserved_tokens + next_tokens
+                )
+                if total_tokens > 2_000_000:
+                    raise CostLimitError(
+                        "LLM token limit exceeded for unpriced models (2,000,000 tokens)",
+                        "Configure model pricing or reduce the document size.",
+                        total_tokens,
+                        2_000_000,
+                    )
             limit = float(self.settings.llm.max_cost_usd)
             amount = float(next_call_estimate_usd or 0)
             if self._spent + float(self._reserved_usd or 0.0) + amount > limit:
@@ -157,10 +174,11 @@ class Ledger:
         pout = max(0, int(tokens_out))
         price = _pricing(self.settings, model)
         with self._lock:
+            unknown_pricing = price is None
             if price is None:
                 price = (_UNKNOWN_INPUT_PER_MTOK, _UNKNOWN_OUTPUT_PER_MTOK)
             amount = pin * price[0] / 1_000_000 + pout * price[1] / 1_000_000
-            self.check_budget(amount, next_tokens=pin + pout)
+            self.check_budget(amount, next_tokens=pin + pout, unknown_pricing=unknown_pricing)
             self._reserved_usd += amount
             self._reserved_tokens += pin + pout
         return float(amount)
