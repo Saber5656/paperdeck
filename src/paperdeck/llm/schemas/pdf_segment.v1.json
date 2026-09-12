@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "SegmentBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 40,
+          "title": "Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "title",
+            "author_line",
+            "abstract",
+            "heading",
+            "paragraph",
+            "display_equation",
+            "figure_caption",
+            "table_caption",
+            "table_body",
+            "bib_entry",
+            "noise"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "number_text": {
+          "anyOf": [
+            {
+              "maxLength": 20,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number Text"
+        },
+        "links_to_block": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Links To Block"
+        }
+      },
+      "required": [
+        "id",
+        "role"
+      ],
+      "title": "SegmentBlock",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "blocks": {
+      "items": {
+        "$ref": "#/$defs/SegmentBlock"
+      },
+      "maxItems": 10000,
+      "title": "Blocks",
+      "type": "array"
+    },
+    "section_order": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "title": "Section Order",
+      "type": "array"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "blocks",
+    "section_order"
+  ],
+  "title": "PdfSegmentV1",
+  "type": "object"
+}

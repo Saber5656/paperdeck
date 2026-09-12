@@ -78,7 +78,10 @@ def process_equations(
         except Exception:
             result.warnings.append(f"pdf-eq-crop-failed:{block_id}")
             continue
-        asset_id = alloc.next("asset") if hasattr(alloc, "next") else f"asset-eq-{sequence}"
+        try:
+            asset_id = alloc.next("asset")
+        except (AttributeError, ValueError):
+            asset_id = f"asset-eq-{sequence}"
         anchor_id = alloc.next("eq") if hasattr(alloc, "next") else f"eq-{sequence}"
         result.assets[asset_id] = _asset(asset_id, image, block.page)
         number = _number(info.number_text, sequence)
@@ -87,7 +90,9 @@ def process_equations(
         used_numbers.add(number)
         draft = EquationDraft(anchor_id, number, asset_id)
         try:
-            estimate = ledger.call_estimate("equation") if hasattr(ledger, "call_estimate") else 1024
+            estimate = (
+                ledger.call_estimate("equation") if hasattr(ledger, "call_estimate") else 1024
+            )
             if not ledger.remaining_allows(estimate):
                 result.warnings.append("vlm-budget-exhausted")
                 result.equations[block_id] = draft
@@ -101,11 +106,10 @@ def process_equations(
                             rest_image = pdfdoc.bitmap(rest_block.page, 2.0).crop_png(
                                 rest_block.bbox, pad_pt=6
                             )
-                            rid = (
-                                alloc.next("asset")
-                                if hasattr(alloc, "next")
-                                else f"asset-eq-{sequence}"
-                            )
+                            try:
+                                rid = alloc.next("asset")
+                            except (AttributeError, ValueError):
+                                rid = f"asset-eq-{sequence}"
                             ra = alloc.next("eq") if hasattr(alloc, "next") else f"eq-{sequence}"
                             result.assets[rid] = _asset(rid, rest_image, rest_block.page)
                             result.equations[rest_id] = EquationDraft(
@@ -127,7 +131,9 @@ def process_equations(
                 "equation",
                 messages,
                 PdfEquationLatexV1,
-                model=getattr(llm.settings.llm, "vlm_model", None),
+                model=getattr(
+                    getattr(getattr(llm, "settings", None), "llm", None), "vlm_model", None
+                ),
                 images=[image],
                 max_tokens=1024,
             )

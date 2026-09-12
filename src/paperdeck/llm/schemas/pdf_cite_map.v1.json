@@ -1,0 +1,44 @@
+{
+  "$defs": {
+    "CiteMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "marker": {
+          "maxLength": 120,
+          "title": "Marker",
+          "type": "string"
+        },
+        "entry_indices": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 20,
+          "title": "Entry Indices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "marker"
+      ],
+      "title": "CiteMapping",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "mappings": {
+      "items": {
+        "$ref": "#/$defs/CiteMapping"
+      },
+      "maxItems": 1000,
+      "title": "Mappings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "mappings"
+  ],
+  "title": "PdfCiteMapV1",
+  "type": "object"
+}

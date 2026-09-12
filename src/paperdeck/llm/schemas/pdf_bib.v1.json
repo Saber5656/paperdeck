@@ -1,0 +1,56 @@
+{
+  "$defs": {
+    "BibEntryOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "anyOf": [
+            {
+              "maxLength": 20,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "text": {
+          "maxLength": 2000,
+          "title": "Text",
+          "type": "string"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Urls",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "BibEntryOutput",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/BibEntryOutput"
+      },
+      "maxItems": 500,
+      "title": "Entries",
+      "type": "array"
+    }
+  },
+  "required": [
+    "entries"
+  ],
+  "title": "PdfBibV1",
+  "type": "object"
+}
