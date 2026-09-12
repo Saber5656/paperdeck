@@ -93,7 +93,9 @@ def _all_inlines(doc: Document) -> Iterator[Inline]:
     for inline in doc.meta.title:
         yield from _inline_children(inline)
     if doc.meta.abstract:
-        for block in doc.meta.abstract:
+        for block in iter_blocks(
+            doc.model_copy(update={"body": doc.meta.abstract, "footnotes": []})
+        ):
             yield from iter_inlines(block)
 
 
@@ -108,9 +110,13 @@ def validate_document(doc: Document, limits: LimitsSettings) -> list[Warning]:
     """Validate references, assets and anchors, returning non-fatal warnings."""
     warnings: list[Warning] = []
     blocks = list(iter_blocks(doc))
+    if doc.meta.abstract:
+        blocks.extend(
+            iter_blocks(doc.model_copy(update={"body": doc.meta.abstract, "footnotes": []}))
+        )
     bib_entries = {entry.id for entry in doc.bibliography}
     anchor_ids: list[str] = [block.id for block in blocks]
-    anchor_ids.extend(bib_entries)
+    anchor_ids.extend(entry.id for entry in doc.bibliography)
     if len(anchor_ids) != len(set(anchor_ids)):
         duplicate = next(item for item in set(anchor_ids) if anchor_ids.count(item) > 1)
         raise _fail(f"duplicate anchor id: {duplicate}")
