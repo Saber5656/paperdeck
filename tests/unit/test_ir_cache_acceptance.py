@@ -222,9 +222,7 @@ def test_validation_warning_contracts() -> None:
         }
     )
     limited = LimitsSettings(embed_warn_mb=1, embed_hard_max_mb=1)
-    assert any(
-        item.code == "assets-over-budget" for item in validate_document(large_doc, limited)
-    )
+    assert any(item.code == "assets-over-budget" for item in validate_document(large_doc, limited))
 
 
 def test_validation_hard_failures_cover_cites_and_duplicate_ids() -> None:
@@ -249,9 +247,7 @@ def test_validation_hard_failures_cover_cites_and_duplicate_ids() -> None:
     missing_ref = document.model_copy(
         update={
             "body": [
-                Paragraph(
-                    id="ref", content=[RefLink(target_id="missing", kind="sec", text="?")]
-                )
+                Paragraph(id="ref", content=[RefLink(target_id="missing", kind="sec", text="?")])
             ],
             "labels": {},
         }
