@@ -8,7 +8,7 @@ import tomllib
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn, TypeVar
 from urllib.parse import urlparse
 
 from platformdirs import user_config_path
@@ -19,6 +19,41 @@ from .errors import ConfigError
 
 class FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+_T = TypeVar("_T")
+
+
+class FrozenDict(dict[str, _T]):
+    """A JSON-serializable mapping that rejects all in-place mutation."""
+
+    @staticmethod
+    def _immutable() -> NoReturn:
+        raise TypeError("configuration mappings are immutable")
+
+    def __setitem__(self, key: str, value: _T) -> None:
+        self._immutable()
+
+    def __delitem__(self, key: str) -> None:
+        self._immutable()
+
+    def clear(self) -> None:
+        self._immutable()
+
+    def pop(self, key: str, default: _T | None = None) -> _T | None:  # type: ignore[override]
+        self._immutable()
+
+    def popitem(self) -> tuple[str, _T]:
+        self._immutable()
+
+    def setdefault(self, key: str, default: _T | None = None) -> _T | None:  # type: ignore[override]
+        self._immutable()
+
+    def update(self, other: dict[str, _T] | None = None, **kwargs: _T) -> None:  # type: ignore[override]
+        self._immutable()
+
+    def __ior__(self, other: object) -> NoReturn:  # type: ignore[misc]
+        self._immutable()
 
 
 class PricingEntry(FrozenModel):
@@ -42,6 +77,11 @@ class LlmSettings(FrozenModel):
     cache: bool
     pricing: dict[str, PricingEntry]
     estimate: EstimateSettings
+
+    @field_validator("pricing", mode="after")
+    @classmethod
+    def freeze_pricing(cls, value: dict[str, PricingEntry]) -> dict[str, PricingEntry]:
+        return FrozenDict(value)
 
     @field_validator("base_url")
     @classmethod
