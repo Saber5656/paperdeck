@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from paperdeck.ir.model import Equation, ExtLink, Paragraph, Text
+from paperdeck.ir.model import BibUrl, Equation, ExtLink, Paragraph, Text
 
 
 def test_discriminated_inline_parses() -> None:
@@ -25,3 +25,11 @@ def test_extlink_and_extra_are_rejected() -> None:
         ExtLink(url="javascript:alert(1)", content=[])
     with pytest.raises(ValidationError):
         Text(text="x", extra="bad")
+
+
+@pytest.mark.parametrize("scheme", ["javascript", "data", "file", "vbscript"])
+def test_unsafe_url_schemes_are_rejected_by_both_link_models(scheme: str) -> None:
+    with pytest.raises(ValidationError):
+        ExtLink(url=f"{scheme}:payload", content=[])
+    with pytest.raises(ValidationError):
+        BibUrl(url=f"{scheme}:payload", kind="generic")

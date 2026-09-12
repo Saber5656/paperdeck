@@ -127,6 +127,24 @@ def test_arxiv_http_is_upgraded_and_llm_authority_is_exact(monkeypatch: pytest.M
         gate.client("llm").get("https://api.example.test:8443/v1/chat/completions")
 
 
+def test_arxiv_client_uses_one_connection_and_http_boundary_is_unique() -> None:
+    client = NetGate(settings()).client("arxiv")
+    transport = client._transport  # type: ignore[attr-defined]
+    pool = transport.inner._pool  # type: ignore[attr-defined]
+    assert pool._max_connections == 1  # type: ignore[attr-defined]
+    source_root = Path(__file__).parents[2] / "src" / "paperdeck"
+    direct_httpx_imports = [
+        path
+        for path in source_root.rglob("*.py")
+        if path.name != "netgate.py"
+        and (
+            "import httpx" in path.read_text(encoding="utf-8")
+            or "from httpx" in path.read_text(encoding="utf-8")
+        )
+    ]
+    assert direct_httpx_imports == []
+
+
 def test_rate_limiter_waits_only_when_interval_remains() -> None:
     now = [0.0]
     sleeps: list[float] = []
