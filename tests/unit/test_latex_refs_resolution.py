@@ -98,3 +98,21 @@ def test_reference_resolution_ignores_known_structural_commands() -> None:
     result = resolve_references(doc, {}, {})
     assert all(paragraph.content == [] for paragraph in result.body)
     assert not any(item.code.startswith("raw-tex-dropped") for item in result.warnings)
+
+
+def test_reference_resolution_ignores_extracted_bibliography_block() -> None:
+    raw = r"\begin{thebibliography}{9}\bibitem{x} X.\end{thebibliography}"
+    doc = MappedDoc(
+        [Paragraph(id="p", content=[Text(text="\ue0000\ue001")])],
+        [],
+        [],
+        None,
+        [],
+        [RawSpan("\ue0000\ue001", raw, "block")],
+        {},
+        {},
+        {},
+        set(),
+    )
+    result = resolve_references(doc, {}, {"x": BibRef("bib-1", "1", None)})
+    assert not any(item.code.startswith("raw-tex-dropped") for item in result.warnings)
