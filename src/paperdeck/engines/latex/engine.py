@@ -1,0 +1,1 @@
+"""LaTeX engine assembly placeholder."""

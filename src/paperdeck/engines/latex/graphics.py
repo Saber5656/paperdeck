@@ -1,0 +1,1 @@
+"""LaTeX graphics placeholder."""

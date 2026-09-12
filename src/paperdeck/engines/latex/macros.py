@@ -1,0 +1,1 @@
+"""LaTeX macro extraction placeholder."""

@@ -1,0 +1,1 @@
+"""LaTeX counter replay placeholder."""
