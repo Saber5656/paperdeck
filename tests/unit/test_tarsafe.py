@@ -1,3 +1,4 @@
+import gzip
 import io
 import tarfile
 from pathlib import Path
@@ -5,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from paperdeck.errors import SecurityError
-from paperdeck.input.tarsafe import extract_tar, sniff_kind
+from paperdeck.input.tarsafe import extract_tar, gunzip_file, sniff_kind
 
 
 class Limits:
@@ -42,3 +43,43 @@ def test_rejects_traversal(tmp_path: Path, name: str, code: str) -> None:
         extract_tar(archive, tmp_path / "out", Limits())
     assert exc.value.code == code
     assert not (tmp_path / "out").exists()
+
+
+def test_rejects_links_devices_and_rolls_back_after_stream_cap(tmp_path: Path) -> None:
+    archive = tmp_path / "links.tar"
+    with tarfile.open(archive, "w") as tar:
+        link = tarfile.TarInfo("link")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "../../outside"
+        tar.addfile(link)
+    with pytest.raises(SecurityError) as exc:
+        extract_tar(archive, tmp_path / "out", Limits())
+    assert exc.value.code == "tar-link-escape"
+
+    device_archive = tmp_path / "device.tar"
+    with tarfile.open(device_archive, "w") as tar:
+        device = tarfile.TarInfo("dev")
+        device.type = tarfile.CHRTYPE
+        tar.addfile(device)
+    with pytest.raises(SecurityError) as exc:
+        extract_tar(device_archive, tmp_path / "device-out", Limits())
+    assert exc.value.code == "tar-special-member"
+
+    oversized = tmp_path / "large.tar"
+    make_tar(oversized, data=b"x" * (Limits.max_archive_total_mb * 1024 * 1024 + 1))
+    destination = tmp_path / "existing"
+    destination.mkdir()
+    (destination / "keep").write_text("keep")
+    with pytest.raises(SecurityError) as exc:
+        extract_tar(oversized, destination, Limits())
+    assert exc.value.code == "archive-bomb"
+    assert (destination / "keep").read_text() == "keep"
+
+
+def test_gzip_single_bomb_leaves_no_output(tmp_path: Path) -> None:
+    source = tmp_path / "source.gz"
+    source.write_bytes(gzip.compress(b"x" * (2 * 1024 * 1024)))
+    destination = tmp_path / "source.tex"
+    with pytest.raises(SecurityError) as exc:
+        gunzip_file(source, destination, 1)
+    assert exc.value.code == "archive-bomb" and not destination.exists()
