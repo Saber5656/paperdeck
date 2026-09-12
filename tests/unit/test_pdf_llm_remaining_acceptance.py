@@ -17,6 +17,7 @@ from paperdeck.engines.pdf.citations import (
     CiteNode,
     RefNode,
     Splice,
+    _non_overlapping,
     link_citations,
     link_structural_refs,
 )
@@ -382,6 +383,15 @@ def test_citation_matrix_structural_overlap_and_zero_candidate_short_circuit() -
         SimpleNamespace(number=str(i), id=f"bib-{i}", text=f"Entry {i}") for i in range(1, 8)
     ]
     assert link_citations(["[99]"], small_bib) == [[]]
+
+    overlap = _non_overlapping(
+        [
+            Splice(0, 10, CiteNode(["bib-1"], "long")),
+            Splice(0, 4, CiteNode(["bib-2"], "short")),
+        ]
+    )
+    assert len(overlap) == 1
+    assert overlap[0].node.bib_ids == ["bib-1"]
     structural = link_structural_refs(
         ["§4.1 Eq. (3a)"], {("sec", "4.1"): "sec-4", ("eq", "3a"): "eq-3a"}
     )
@@ -456,3 +466,34 @@ def test_assembly_golden_mixed_splices_and_bib_script_data() -> None:
     first["provenance"]["created_at"] = "fixed"
     second["provenance"]["created_at"] = "fixed"
     assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+
+
+def test_assembly_unlinked_above_caption_uses_the_nearest_region() -> None:
+    class Pdf(_Pdf):
+        def __init__(self) -> None:
+            self.crops: list[tuple[float, float, float, float]] = []
+
+        def crop_png(self, bbox: tuple[float, float, float, float], pad_pt: float = 0) -> bytes:
+            self.crops.append(bbox)
+            return super().crop_png(bbox, pad_pt)
+
+    pdf = Pdf()
+    body = RawBlock("figure-body", 0, (40.0, 300.0, 560.0, 400.0), "art", 10.0, 1)
+    caption = _raw("caption", "Figure 1", y=240)
+    seg = SegmentResult(
+        {
+            "figure-body": RoleInfo("figure_body"),
+            "caption": RoleInfo("figure_caption", number_text="1"),
+        },
+        [],
+        ["figure-body", "caption"],
+    )
+    assemble_pdf(
+        seg,
+        [body, caption],
+        SimpleNamespace(equations={}, assets={}, warnings=[]),
+        ([], {}, [], []),
+        pdf,
+        load_settings(None, {}),
+    )
+    assert pdf.crops == [body.bbox]
