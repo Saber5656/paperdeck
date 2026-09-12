@@ -129,7 +129,7 @@ th { font-weight: 600; }
 }
 @media print {
   html, html[data-theme], body { background: var(--print-bg); color: var(--print-fg); }
-  #pd-header, #pd-toc, #pd-back, #pd-toast, #pd-help, #pd-popup, #pd-toc-backdrop, .pd-copy-latex { display: none; }
+  #pd-header, #pd-toc, .pd-toc-open #pd-toc, #pd-back, #pd-toast, #pd-help, #pd-popup, #pd-toc-backdrop, .pd-copy-latex { display: none; }
   #pd-content { max-width: none; width: 100%; padding: 0; margin: 0; }
   .pd-toc-open #pd-main-wrap { margin-left: 0; }
   .pd-eq, figure, li { break-inside: avoid; }
