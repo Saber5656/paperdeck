@@ -72,6 +72,16 @@ def test_pdf_engine_runs_through_local_fake_chat_and_validates_ir(tmp_path: Path
         assert document.body
         assert document.provenance.llm is not None
         assert document.provenance.llm.calls == 1
+        assert context.run_metrics["calls"] == 1
+        assert context.run_metrics["actual_usd"] is not None
+        assert set(context.run_metrics) == {
+            "calls",
+            "cache_hits",
+            "tokens_in",
+            "tokens_out",
+            "estimated_usd",
+            "actual_usd",
+        }
     finally:
         server.shutdown()
 
@@ -106,11 +116,17 @@ def test_pdf_available_rejects_wrong_kind_and_accepts_arxiv_without_path(tmp_pat
     engine = PdfEngine()
     local = EngineContext(
         InputSpec("latex-local", path=tmp_path / "missing.pdf", original="x"),
-        settings, CacheManager(tmp_path / "cache"), tmp_path, lambda _: True
+        settings,
+        CacheManager(tmp_path / "cache"),
+        tmp_path,
+        lambda _: True,
     )
     assert engine.available(local) == (False, "pdf-input-kind")
     arxiv = EngineContext(
         InputSpec("arxiv", arxiv_id="2401.12345", version=1, original="2401.12345v1"),
-        settings, CacheManager(tmp_path / "cache2"), tmp_path, lambda _: True
+        settings,
+        CacheManager(tmp_path / "cache2"),
+        tmp_path,
+        lambda _: True,
     )
     assert engine.available(arxiv) == (True, "available")

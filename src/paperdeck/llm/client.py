@@ -164,9 +164,42 @@ class LlmClient:
             "max_tokens": max_tokens,
         }
 
-    def _transport(self, body: dict[str, Any]) -> HttpResponse:
+    @staticmethod
+    def _response_usage(response: HttpResponse, estimated: dict[str, Any]) -> dict[str, Any]:
+        try:
+            payload = response.json()
+            usage = payload.get("usage") if isinstance(payload, dict) else None
+            if isinstance(usage, dict) and (
+                usage.get("prompt_tokens") or usage.get("completion_tokens")
+            ):
+                return dict(usage)
+        except (ValueError, TypeError):
+            pass
+        return dict(estimated)
+
+    def _transport(
+        self,
+        body: dict[str, Any],
+        *,
+        purpose: str,
+        model: str,
+        ledger: Any,
+        estimated_in: int,
+        max_tokens: int,
+    ) -> HttpResponse:
         last: Exception | None = None
         for attempt in range(3):
+            reservation = 0.0
+            reservation_tokens = estimated_in + max_tokens
+            estimated_usage = {
+                "prompt_tokens": estimated_in,
+                "completion_tokens": max_tokens,
+                "estimated": True,
+            }
+            if ledger is not None:
+                reservation = ledger.reserve_call(
+                    model, tokens_in=estimated_in, tokens_out=max_tokens
+                )
             try:
                 client = self.netgate.client("llm")
                 response = client.post(
@@ -175,6 +208,13 @@ class LlmClient:
                     headers=self._headers(),
                     timeout=self.settings.llm.timeout_s,
                 )
+                if self.on_usage:
+                    self.on_usage(
+                        purpose,
+                        model,
+                        self._response_usage(response, estimated_usage),
+                        False,
+                    )
                 if response.status_code == 400:
                     return response  # type: ignore[no-any-return]
                 if response.status_code == 429 or response.status_code >= 500:
@@ -190,10 +230,15 @@ class LlmClient:
                 response.raise_for_status()
                 return response  # type: ignore[no-any-return]
             except (TimeoutException, TransportError) as exc:
+                if self.on_usage:
+                    self.on_usage(purpose, model, estimated_usage, False)
                 last = exc
                 if attempt < 2:
                     time.sleep((attempt + 1) ** 2 + secrets.SystemRandom().random())
                     continue
+            finally:
+                if ledger is not None:
+                    ledger.release_call(reservation, tokens=reservation_tokens)
         raise LlmError(
             "LLM transport failed",
             "Check the LLM endpoint and network connectivity.",
@@ -252,62 +297,36 @@ class LlmClient:
             estimated_in = max(1, input_chars // 4 + image_tokens)
             # _transport itself has up to three HTTP retries. Reserve for all of
             # them so a retry can never bypass the hard cap.
-            reservation = 0.0
-            reservation_tokens = (estimated_in + max_tokens) * 3
-            if ledger is not None:
-                reservation = ledger.reserve_call(
-                    selected, tokens_in=estimated_in * 3, tokens_out=max_tokens * 3
-                )
-            response = self._transport(body)
-            if ledger is not None:
-                ledger.release_call(reservation, tokens=reservation_tokens)
-            # Account for this physical request before parsing or validating it:
-            # malformed JSON and truncated replies are billable too. When a
-            # provider omits usage, the conservative request estimate is used.
-            estimated_usage = {
-                "prompt_tokens": estimated_in,
-                "completion_tokens": max_tokens,
-                "estimated": True,
-            }
-            usage_for_record: dict[str, Any] = estimated_usage
-            try:
-                candidate = response.json()
-                if isinstance(candidate, dict) and isinstance(candidate.get("usage"), dict):
-                    candidate_usage = dict(candidate["usage"])
-                    if candidate_usage.get("prompt_tokens") or candidate_usage.get(
-                        "completion_tokens"
-                    ):
-                        usage_for_record = candidate_usage
-            except (ValueError, TypeError):
-                pass
-            if self.on_usage:
-                self.on_usage(purpose, selected, usage_for_record, False)
+            response = self._transport(
+                body,
+                purpose=purpose,
+                model=selected,
+                ledger=ledger,
+                estimated_in=estimated_in,
+                max_tokens=max_tokens,
+            )
             if response.status_code == 400 and not self._compat_mode:
                 detail = response.text
                 if "response_format" in detail.lower() or "json_schema" in detail.lower():
                     self._compat_mode = True
                     body = self._body(selected, current, schema, max_tokens, True)
-                    if ledger is not None:
-                        reservation = ledger.reserve_call(
-                            selected, tokens_in=estimated_in * 3, tokens_out=max_tokens * 3
-                        )
-                    response = self._transport(body)
-                    if ledger is not None:
-                        ledger.release_call(reservation, tokens=reservation_tokens)
-                    usage_for_record = dict(estimated_usage)
-                    try:
-                        candidate = response.json()
-                        if isinstance(candidate, dict) and isinstance(candidate.get("usage"), dict):
-                            candidate_usage = dict(candidate["usage"])
-                            if candidate_usage.get("prompt_tokens") or candidate_usage.get(
-                                "completion_tokens"
-                            ):
-                                usage_for_record = candidate_usage
-                    except (ValueError, TypeError):
-                        pass
-                    if self.on_usage:
-                        self.on_usage(purpose, selected, usage_for_record, False)
+                    response = self._transport(
+                        body,
+                        purpose=purpose,
+                        model=selected,
+                        ledger=ledger,
+                        estimated_in=estimated_in,
+                        max_tokens=max_tokens,
+                    )
             try:
+                usage_for_cache = self._response_usage(
+                    response,
+                    {
+                        "prompt_tokens": estimated_in,
+                        "completion_tokens": max_tokens,
+                        "estimated": True,
+                    },
+                )
                 payload = response.json()
                 choice = payload["choices"][0]
                 if choice.get("finish_reason") == "length":
@@ -347,7 +366,7 @@ class LlmClient:
                     "llm-invalid-json",
                 ) from exc
             if self.cache is not None:
-                self.cache.put(cache_key, content, usage_for_record)
+                self.cache.put(cache_key, content, usage_for_cache)
             return validated
         raise LlmError("LLM returned invalid JSON", "Retry the conversion.", "llm-invalid-json")
 
