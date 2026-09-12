@@ -3,7 +3,6 @@ from copy import deepcopy
 
 import pytest
 from bs4 import BeautifulSoup
-from test_renderer import document
 
 from paperdeck.config import load_settings
 from paperdeck.errors import ConversionError
@@ -11,6 +10,7 @@ from paperdeck.ir.model import Asset, AssetOrigin, Equation, Figure, Table
 from paperdeck.render.assets import build_bundle
 from paperdeck.render.html import render
 from paperdeck.render.validate import validate_html
+from tests.fixtures.reader import document
 
 
 def test_budget_drops_figures_before_tables_and_preserves_equations():
