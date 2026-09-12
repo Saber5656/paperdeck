@@ -1,16 +1,24 @@
-# LaTeX semantic goldens
+# LaTeX corpus goldens
 
-The files in `tests/goldens/latex/` record the stable, user-visible facts from the
-subprocess LaTeX corpus run: title, section headings, equation numbering, and the
-presence of the content-security policy. They intentionally omit provenance timestamps
-and generated asset bytes, which are validated separately by the self-containment and
-HTML tests.
+`minimal.html` and `equations.html` are byte-comparable HTML snapshots from the
+subprocess LaTeX corpus run. Their only normalized value is the Pandoc version in the
+footer (`pandoc VERSION`), because the CI matrix intentionally runs Pandoc 3.1 and
+3.11. Provenance timestamps are kept in the report rather than HTML, and generated
+asset bytes remain covered by the self-containment validator.
+
+The JSON files record stable semantic facts for all eight corpus projects, including
+the six extended projects.
 
 To regenerate a golden after an intentional IR or renderer change, run the marked
-pipeline test with `PAPERDECK_FAKE_NOW` set to a fixed ISO timestamp, inspect the
-rendered HTML and validator report, then update the corresponding JSON by hand. CI
-never regenerates these files; a changed golden must be reviewed with its fixture and
-the semantic test.
+pipeline test with `PAPERDECK_FAKE_NOW` set to a fixed ISO timestamp and the explicit
+update flag, inspect the rendered HTML and validator report, then review the diff:
+
+```sh
+PAPERDECK_FAKE_NOW=2000-01-01T00:00:00+00:00 uv run pytest tests/e2e/test_pipeline_latex.py::test_latex_corpus_cli_and_standalone_validator --update-goldens -q
+```
+
+CI never regenerates these files; without `--update-goldens`, changed or missing HTML
+goldens fail the test.
 # Rendered reader
 
 `reading-demo.html` is actual offline CLI output from `examples/reading-demo.tex`.
