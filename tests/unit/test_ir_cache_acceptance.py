@@ -294,10 +294,19 @@ def test_error_subclasses_have_exit_codes_and_presenter_hygiene() -> None:
         assert EXIT_CODES[cls] == expected
     safe, code = present_error(SecurityError("x\x1b[31m" + "A" * 10000, "fix"), 0)
     assert code == 9
-    assert "\x1b" not in safe and len(safe) <= 240
+    assert "\x1b" not in safe and "[31m" not in safe and len(safe) <= 200
     debug, debug_code = present_error(error, 2)
     assert debug_code == 5 and "AllEnginesFailedError" in debug
     assert "AllEnginesFailedError" not in rendered
+
+
+def test_anchor_allocator_sequences_each_kind_and_replays_stably() -> None:
+    kinds = ("sec", "sec", "eq", "para", "eq")
+    expected = ["sec-1", "sec-2", "eq-1", "para-1", "eq-2"]
+    allocator = AnchorAllocator()
+    assert [allocator.next(kind) for kind in kinds] == expected
+    replay = AnchorAllocator()
+    assert [replay.next(kind) for kind in kinds] == expected
 
 
 def test_cache_atomic_crash_cleanup_and_permissions(tmp_path: Path, monkeypatch) -> None:

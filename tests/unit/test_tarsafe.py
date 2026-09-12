@@ -33,6 +33,34 @@ def test_happy_path_and_sniff(tmp_path: Path) -> None:
     assert (dest / "src/main.tex").read_bytes().startswith(b"\\documentclass")
 
 
+def test_representative_arxiv_tree_normalizes_permissions(tmp_path: Path) -> None:
+    archive = tmp_path / "paper.tar"
+    with tarfile.open(archive, "w") as tar:
+        for name in ("paper/", "paper/figures/"):
+            info = tarfile.TarInfo(name)
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o777
+            tar.addfile(info)
+        for name, payload in (
+            ("paper/main.tex", b"\\documentclass{article}"),
+            ("paper/main.bbl", b"\\bibitem{key} Entry"),
+            ("paper/figures/plot.png", b"PNG"),
+        ):
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            info.mode = 0o777
+            tar.addfile(info, io.BytesIO(payload))
+    dest = tmp_path / "tree"
+    files = extract_tar(archive, dest, Limits())
+    assert files == [
+        dest / "paper/main.tex",
+        dest / "paper/main.bbl",
+        dest / "paper/figures/plot.png",
+    ]
+    assert (dest / "paper").stat().st_mode & 0o777 == 0o755
+    assert (dest / "paper/main.tex").stat().st_mode & 0o777 == 0o644
+
+
 @pytest.mark.parametrize(
     "name, code", [("/etc/passwd", "tar-path-invalid"), ("../../escape", "tar-path-invalid")]
 )
