@@ -210,24 +210,27 @@ def resolve_graphics(doc: Any, project: Any, limits: Any) -> tuple[dict[str, Ass
             try:
                 import pypdfium2 as pdfium  # type: ignore[import-untyped]
 
-                pdf = pdfium.PdfDocument(str(path))
-                if len(pdf) > 1:
-                    warnings.append(
-                        Warning(
-                            code="figure-pdf-multipage",
-                            message="only page 1 of figure PDF used",
-                            where=target,
+                with pdfium.PdfDocument(str(path)) as pdf:
+                    if len(pdf) > 1:
+                        warnings.append(
+                            Warning(
+                                code="figure-pdf-multipage",
+                                message="only page 1 of figure PDF used",
+                                where=target,
+                            )
                         )
-                    )
-                page = pdf[0]
-                width, height = page.get_size()
-                scale = min(2.0, 2000 / max(width, height))
-                bitmap = page.render(scale=scale)
-                image = bitmap.to_pil()
-                stream = io.BytesIO()
-                image.save(stream, format="PNG")
-                data = stream.getvalue()
-                dims = (image.width, image.height)
+                    page = pdf[0]
+                    try:
+                        width, height = page.get_size()
+                        scale = min(2.0, 2000 / max(width, height))
+                        bitmap = page.render(scale=scale)
+                        image = bitmap.to_pil()
+                        stream = io.BytesIO()
+                        image.save(stream, format="PNG")
+                        data = stream.getvalue()
+                        dims = (image.width, image.height)
+                    finally:
+                        page.close()
             except Exception as exc:
                 warnings.append(
                     Warning(

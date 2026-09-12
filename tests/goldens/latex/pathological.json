@@ -1,0 +1,20 @@
+{
+  "snapshot": {
+    "title": "",
+    "sections": ["1 Degraded Input"],
+    "figures": 0,
+    "tables": 0,
+    "figure_refs": 0,
+    "table_refs": 0,
+    "bib_refs": 0,
+    "bib_entries": 0,
+    "math": 0,
+    "code": 1
+  },
+  "warnings": [
+    "unresolved-ref",
+    "raw-tex-dropped:\\unknowncommand{value}",
+    "raw-tex-dropped:\\begin{mysteryenv}\nUnknown env",
+    "unresolved-ref"
+  ]
+}

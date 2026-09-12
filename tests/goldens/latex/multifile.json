@@ -1,0 +1,15 @@
+{
+  "snapshot": {
+    "title": "A Multifile Study",
+    "sections": ["1 Introduction", "2 Methods", "A Supplement"],
+    "figures": 0,
+    "tables": 0,
+    "figure_refs": 0,
+    "table_refs": 0,
+    "bib_refs": 0,
+    "bib_entries": 0,
+    "math": 0,
+    "code": 0
+  },
+  "warnings": []
+}

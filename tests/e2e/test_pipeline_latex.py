@@ -23,6 +23,22 @@ def _semantic_snapshot(html: str) -> dict[str, object]:
     }
 
 
+def _extended_snapshot(html: str) -> dict[str, object]:
+    soup = BeautifulSoup(html, "html.parser")
+    return {
+        "title": soup.select_one(".pd-document-header h1").get_text(" ", strip=True),
+        "sections": [item.get_text(" ", strip=True) for item in soup.select("section > h2")],
+        "figures": len(soup.select('figure[id^="fig-"]')),
+        "tables": len(soup.select('figure[id^="tab-"]')),
+        "figure_refs": len(soup.select('a.pd-ref[href^="#fig-"]')),
+        "table_refs": len(soup.select('a.pd-ref[href^="#tab-"]')),
+        "bib_refs": len(soup.select('a.pd-ref[href^="#bib-"]')),
+        "bib_entries": len(soup.select('li[id^="bib-"]')),
+        "math": len(soup.select(".pd-math")),
+        "code": len(soup.select("code")),
+    }
+
+
 @pytest.mark.pandoc
 def test_latex_corpus_cli_and_standalone_validator(tmp_path: Path) -> None:
     for name in ("minimal", "equations"):
@@ -137,3 +153,67 @@ def test_latex_cached_arxiv_cli_offline(tmp_path: Path) -> None:
     assert "Offline Cached Paper" in output.read_text()
     report = json.loads((Path(str(output) + ".report.json")).read_text())
     assert report["engine"] == "latex"
+
+
+@pytest.mark.pandoc
+def test_latex_extended_corpus_cli_and_validator(tmp_path: Path) -> None:
+    names = (
+        "figures_tables",
+        "bib_bbl",
+        "bib_natbib",
+        "macros",
+        "multifile",
+        "pathological",
+    )
+    for name in names:
+        output = tmp_path / f"{name}.html"
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "PAPERDECK_OFFLINE": "1",
+                "XDG_CACHE_HOME": str(tmp_path / "cache"),
+                "PAPERDECK_FAKE_NOW": "2000-01-01T00:00:00+00:00",
+            }
+        )
+        result = subprocess.run(  # noqa: S603
+            [
+                "uv",
+                "run",
+                "paperdeck",
+                "-q",
+                "convert",
+                str(CORPUS / name / "main.tex"),
+                "--engine",
+                "latex",
+                "--offline",
+                "--yes",
+                "-o",
+                str(output),
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, f"{name}: {result.stderr}"
+        standalone = subprocess.run(  # noqa: S603
+            ["uv", "run", "python", "-m", "paperdeck.render.validate", str(output)],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert standalone.returncode == 0, f"{name}: {standalone.stdout}{standalone.stderr}"
+        report = json.loads((Path(str(output) + ".report.json")).read_text())
+        assert report["engine"] == "latex"
+        assert report["llm"]["calls"] == 0
+        html = output.read_text()
+        assert "\ue000" not in html and "\ue001" not in html
+        expected = json.loads((GOLDENS / f"{name}.json").read_text())
+        assert _extended_snapshot(html) == expected["snapshot"]
+        assert [warning["code"] for warning in report["warnings"]] == expected["warnings"]
+        if name == "pathological":
+            code = BeautifulSoup(html, "html.parser").select_one("code")
+            assert code is not None and "<script>alert(1)</script>" in code.get_text()

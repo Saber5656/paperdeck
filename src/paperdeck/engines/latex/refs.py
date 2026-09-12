@@ -52,7 +52,7 @@ _END = "\ue001"
 _REFS = {"ref", "eqref", "cref", "Cref", "autoref"}
 _CITES = {"cite", "citep", "citet", "citealp", "citealt", "citeauthor", "citeyear"}
 _STRUCTURAL_TEX = re.compile(
-    r"^\s*\\(?:maketitle\b|bibliographystyle(?:\[[^]]*\])?\s*\{[^{}]*\}|"
+    r"^\s*\\(?:maketitle\b|appendix\b|bibliographystyle(?:\[[^]]*\])?\s*\{[^{}]*\}|"
     r"begin\s*\{thebibliography\}\s*\{[^{}]*\}|end\s*\{thebibliography\})\s*$",
     re.DOTALL,
 )
