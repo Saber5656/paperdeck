@@ -108,7 +108,6 @@ def test_allows_safe_relative_symlink_and_hardlink(tmp_path: Path) -> None:
     assert (destination / "src/current.tex").is_symlink()
     assert (destination / "src/current.tex").read_text() == "safe"
     assert (destination / "src/copy.tex").read_bytes() == b"safe"
-    assert (
-        (destination / "src/copy.tex").stat().st_ino
-        == (destination / "src/main.tex").stat().st_ino
-    )
+    assert (destination / "src/copy.tex").stat().st_ino == (
+        destination / "src/main.tex"
+    ).stat().st_ino
