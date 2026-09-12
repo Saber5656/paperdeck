@@ -23,6 +23,16 @@ def make_tar(
         tar.addfile(info, io.BytesIO(data))
 
 
+def _write_header_bomb(path: Path, count: int) -> None:
+    """Stream valid zero-length tar headers without expanding them in memory."""
+    info = tarfile.TarInfo("member")
+    info.size = 0
+    header = info.tobuf()
+    with gzip.open(path, "wb") as output:
+        for _ in range(count):
+            output.write(header)
+
+
 def test_happy_path_and_sniff(tmp_path: Path) -> None:
     archive = tmp_path / "source.tar"
     make_tar(archive)
@@ -134,6 +144,17 @@ def test_tar_gzip_compression_ratio_bomb_leaves_no_output(tmp_path: Path) -> Non
     with pytest.raises(SecurityError) as exc:
         extract_tar(source, destination, Limits())
     assert exc.value.code == "archive-bomb"
+    assert not destination.exists()
+
+
+def test_million_member_header_bomb_is_rejected_before_extraction(tmp_path: Path) -> None:
+    source = tmp_path / "headers.tar.gz"
+    _write_header_bomb(source, 1_000_000)
+    destination = tmp_path / "headers-out"
+    limits = type("Limits", (), {"max_archive_members": 20, "max_archive_total_mb": 1})()
+    with pytest.raises(SecurityError) as exc:
+        extract_tar(source, destination, limits)
+    assert exc.value.code == "archive-too-many-members"
     assert not destination.exists()
 
 

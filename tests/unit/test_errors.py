@@ -1,3 +1,4 @@
+import pytest
 from click import UsageError
 
 from paperdeck.errors import (
@@ -10,6 +11,7 @@ from paperdeck.errors import (
     SecurityError,
     present_error,
 )
+from paperdeck.logsetup import redact
 
 
 def test_error_contract_and_table() -> None:
@@ -47,3 +49,15 @@ def test_security_content_is_bounded_and_sanitized() -> None:
 def test_security_content_stays_bounded_with_verbose_traceback() -> None:
     rendered, _ = present_error(SecurityError("A" * 10_000, "B" * 10_000), 2)
     assert len(rendered) <= 200
+
+
+@pytest.mark.parametrize("verbose", [0, 1, 2])
+def test_presented_exception_redacts_tokens_at_every_verbosity(verbose: int) -> None:
+    try:
+        raise RuntimeError("sk-test1234567890 Authorization: Bearer xyz-secret")
+    except RuntimeError as exc:
+        rendered, _ = present_error(exc, verbose)
+    safe = redact(rendered)
+    assert "sk-test1234567890" not in safe
+    assert "Bearer xyz-secret" not in safe
+    assert "***" in safe
