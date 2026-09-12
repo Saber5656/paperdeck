@@ -37,6 +37,11 @@ final result: passed
    branches have consistent controls, the reading column remains open and calm,
    and the narrow capture retains all persistent controls. No actionable P0/P1/P2
    visual findings remain.
+6. Linux WebKit exposed slightly wider system text at 320px. The narrow header now
+   uses 8px side padding and a 4px gap; the updated narrow capture retains all
+   controls. Browser tests await visible restore/flash states instead of evaluating
+   string polling under the document's strict CSP. Fresh deep links are tested from
+   a new document navigation.
 
 ## Required fidelity surfaces
 

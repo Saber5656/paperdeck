@@ -1,5 +1,6 @@
 """Browser acceptance against the actual CLI's converted LaTeX demonstration."""
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -64,7 +65,7 @@ def test_converted_references_theme_position_and_help(converted_page):
     assert page.locator("#pd-popup [id]").count() == 0
     reference.click()
     page.keyboard.press("Backspace")
-    page.wait_for_function(f"Math.abs(scrollY - {start}) < 3")
+    assert abs(page.evaluate("() => scrollY") - start) < 3
     page.locator('#pd-toc a[href="#sec-6"]').click()
     expect(page.locator('#pd-toc a[href="#sec-6"]')).to_have_attribute("aria-current", "location")
     page.keyboard.press("d")
@@ -74,7 +75,8 @@ def test_converted_references_theme_position_and_help(converted_page):
     saved = page.evaluate("scrollY")
     page.reload()
     assert page.locator("html").get_attribute("data-theme") == "dark"
-    page.wait_for_function(f"Math.abs(scrollY - {saved}) < 350")
+    expect(page.locator("#pd-toast")).to_be_visible()
+    assert abs(page.evaluate("() => scrollY") - saved) < 350
     page.locator("#pd-help-toggle").click()
     assert page.locator("#pd-help tr").count() == 7
     for _ in range(9):
@@ -88,11 +90,11 @@ def test_converted_references_theme_position_and_help(converted_page):
 
 def test_converted_deep_link_and_footnote(converted_page, converted_paper):
     page = converted_page
+    page.goto("about:blank")
     page.goto(converted_paper.as_uri() + "#eq-2-2")
     assert page.locator("#eq-2-2 .pd-eq-number").inner_text() == "(3)"
-    page.wait_for_function(
-        "Math.abs(document.getElementById('eq-2-2').getBoundingClientRect().top - 72) < 5"
-    )
+    expect(page.locator("#eq-2-2")).to_have_class(re.compile(r"pd-flash"))
+    assert abs(page.locator("#eq-2-2").bounding_box()["y"] - 72) < 5
     assert page.locator("#eq-2-2 .katex").count() == 1
     note = page.locator('a[data-kind="fn"]')
     note.scroll_into_view_if_needed()
