@@ -1,10 +1,13 @@
 # LaTeX corpus goldens
 
 `minimal.html` and `equations.html` are byte-comparable HTML snapshots from the
-subprocess LaTeX corpus run. Their only normalized value is the Pandoc version in the
-footer (`pandoc VERSION`), because the CI matrix intentionally runs Pandoc 3.1 and
-3.11. Provenance timestamps are kept in the report rather than HTML, and generated
-asset bytes remain covered by the self-containment validator.
+subprocess LaTeX corpus run. The comparison normalizes the Pandoc version in the
+footer (`pandoc VERSION`) because the CI matrix intentionally runs Pandoc 3.1 and
+3.11. It also normalizes the reader `docId` and recomputes only the matching CSP hash:
+local source provenance contains an absolute checkout path, and that path intentionally
+changes the document identity. Product code still keeps the real `docId`; only the
+portable golden comparison replaces it. Provenance timestamps are kept in the report,
+and generated asset bytes remain covered by the self-containment validator.
 
 The JSON files record stable semantic facts for all eight corpus projects, including
 the six extended projects.
