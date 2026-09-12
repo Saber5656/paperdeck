@@ -1,3 +1,4 @@
+import io
 import logging
 
 from paperdeck.logsetup import configure_logging, progress, redact
@@ -23,3 +24,26 @@ def test_configure_is_idempotent_and_progress_gated(capsys) -> None:
     configure_logging(0, quiet=True)
     progress("hidden")
     assert "hidden" not in capsys.readouterr().err
+
+
+def test_logging_survives_closed_capture_and_numeric_format(monkeypatch):
+    first = io.StringIO()
+    monkeypatch.setattr("sys.stderr", first)
+    configure_logging(1)
+    first.close()
+    second = io.StringIO()
+    monkeypatch.setattr("sys.stderr", second)
+    configure_logging(1)
+    logging.getLogger("paperdeck.test").info("calls=%d cost=%.2f", 2, 0.25)
+    assert "calls=2 cost=0.25" in second.getvalue()
+
+
+def test_exception_traceback_is_redacted(capsys, monkeypatch):
+    secret = "zz-customsecret987654"  # noqa: S105 -- synthetic redaction fixture
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    configure_logging(2)
+    try:
+        raise ValueError(secret)
+    except ValueError:
+        logging.getLogger("paperdeck.test").exception("failed")
+    assert secret not in capsys.readouterr().err

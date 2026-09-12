@@ -35,14 +35,14 @@ class RedactionFilter(logging.Filter):
         self.api_key_env = api_key_env
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = _mask(str(record.msg), self.api_key_env)
-        if isinstance(record.args, tuple):
-            record.args = tuple(_mask(str(arg), self.api_key_env) for arg in record.args)
-        elif isinstance(record.args, dict):
-            record.args = {
-                key: _mask(str(value), self.api_key_env) for key, value in record.args.items()
-            }
+        record.msg = _mask(record.getMessage(), self.api_key_env)
+        record.args = ()
         return True
+
+
+class _RedactingFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return redact(super().format(record))
 
 
 def configure_logging(
@@ -75,12 +75,19 @@ def configure_logging(
         handler.__dict__["_paperdeck"] = True
         root.addHandler(handler)
     else:
-        handler.setStream(sys.stderr)
+        if getattr(handler.stream, "closed", False):
+            handler.acquire()
+            try:
+                handler.stream = sys.stderr
+            finally:
+                handler.release()
+        else:
+            handler.setStream(sys.stderr)
     handler.setLevel(level)
     handler.filters.clear()
     handler.addFilter(RedactionFilter(api_key_env))
     handler.setFormatter(
-        logging.Formatter(
+        _RedactingFormatter(
             "%(asctime)s %(levelname)s %(name)s: %(message)s"
             if verbosity >= 2
             else "%(levelname)s %(name)s: %(message)s"
