@@ -66,9 +66,7 @@ def test_decoded_response_cap_blocks_compressed_bomb(
     monkeypatch.setattr("paperdeck.netgate._ARXIV_RATE_LIMITER.wait", lambda: None)
     payload = gzip.compress(b"x" * (1024 * 1024 + 1))
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, headers={"content-encoding": "gzip"}, content=payload
-        )
+        lambda request: httpx.Response(200, headers={"content-encoding": "gzip"}, content=payload)
     )
     gate = NetGate(settings(), transport=transport)
     with pytest.raises(FetchError) as exc:

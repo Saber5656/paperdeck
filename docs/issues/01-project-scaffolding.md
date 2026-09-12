@@ -45,10 +45,16 @@ protocol right first means later issues are purely additive and mechanical.
    ```python
    @dataclass(frozen=True)
    class EngineContext:
-       spec: "InputSpec"; settings: "Settings"; cache: "CacheManager"
-       workdir: Path; confirm_cost: Callable[[CostEstimate], bool]
+       spec: "InputSpec"
+       settings: "Settings"
+       cache: "CacheManager"
+       workdir: Path
+       confirm_cost: Callable[[CostEstimate], bool]
+
+
    class Engine(Protocol):
        name: ClassVar[str]
+
        def available(self, ctx: EngineContext) -> tuple[bool, str]: ...
        def convert(self, ctx: EngineContext) -> "Document": ...
    ```
