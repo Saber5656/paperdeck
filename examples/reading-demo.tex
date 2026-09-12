@@ -1,0 +1,45 @@
+\documentclass{article}
+\title{A Simple Model of Collective Learning}
+\author{Elena Martelli \and Daniel K. Reeves}
+\newcommand{\R}{\mathbb{R}}
+\begin{document}
+\maketitle
+\begin{abstract}
+We develop a simple model of collective learning in which individuals update beliefs from private signals and the observed actions of their peers. The model illustrates how information can move through a community, when a shared observation changes a decision, and why preserving the evidence behind an inference matters. This synthetic paper demonstrates paperdeck's offline reading experience. Its equations, references, and figures are examples for testing the reader, rather than published research results.
+\end{abstract}
+\section{Introduction}\label{sec:intro}
+Groups learn from the experiences of their members. Whether in scientific communities, organizations, or ordinary conversation, people combine their private observations with the actions of others. A useful model separates the evidence available to each person from the rule that combines this evidence into a belief.
+
+Reading such a model often means moving between an argument, an equation, and an earlier definition. Equation~\eqref{eq:belief} is a compact example: hover or focus the reference to inspect it, or follow the link and use Back to return to this paragraph. The document and its reference previews remain available without an internet connection.
+\begin{equation}
+\mu_i(\theta) = \frac{f(s_i\mid\theta)L_i(\theta)}{\int f(s_i\mid\tau)L_i(\tau)\,d\tau}
+\label{eq:belief}
+\end{equation}
+Here $s_i$ is an individual's private signal, $f$ is the likelihood of that signal, and $L_i$ records information obtained from earlier observations. The denominator ensures that beliefs sum to one. This formula is included to exercise mathematical typesetting and reference navigation.\footnote{The paper is a fictional demonstration included with paperdeck.}
+
+A reader should be able to inspect the denominator without losing the surrounding argument. The reference preview presents the equation in context, while the separate Back control remembers the previous reading position. Keyboard navigation and a persistent table of contents support longer reading sessions.
+\section{Method}\label{sec:method}
+The construction proceeds in two steps. First, each observation is retained with a stable identifier. Second, the evidence is combined through a normalized update. We use the notation in Section~\ref{sec:intro}; the mathematical form follows the example in~\cite{example}.
+\subsection{A normalized update}
+For a finite set of states, the integral in Equation~\eqref{eq:belief} becomes a sum. The resulting weights remain nonnegative and normalized:
+\begin{align}
+ w_j &= f(s_i\mid\theta_j)L_i(\theta_j) \label{eq:weight}\\
+ p_j &= \frac{w_j}{\sum_k w_k}. \label{eq:normalize}
+\end{align}
+The second equation can be previewed independently via~\eqref{eq:normalize}. Its label belongs to the second row, which makes this example useful for testing numbering in a multi-row environment.
+\subsection{Reading assumptions}
+\begin{itemize}
+\item The source text and its structural references are retained.
+\item A missing reference is displayed as unresolved, without inventing a destination.
+\item PDF equation crops remain the ground truth; a model-generated transcription is marked unverified.
+\end{itemize}
+\section{Results}
+This example is successful when the title, sections, equations, references, and footnote are readable offline. The contents control opens the section list on a small screen. The theme control cycles between automatic, light, and dark appearance. Print view omits the navigation controls.
+
+The reader stores a reading position when the browser permits local storage. Returning to the document restores that position. A direct fragment link takes precedence over the stored position, so a shared reference still opens the intended equation.
+\section{Discussion}
+The demonstration is intentionally small. Real papers may include custom TeX commands, image tables, or layouts that need a best-effort conversion. Warnings in the conversion details make these limitations visible. They do not silently replace the source evidence.
+\begin{thebibliography}{9}
+\bibitem{example} Paperdeck contributors. \emph{Reader demonstration and verification notes}. Synthetic example, 2026.
+\end{thebibliography}
+\end{document}

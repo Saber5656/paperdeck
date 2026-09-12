@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 pytestmark = pytest.mark.playwright
 ASSETS = Path(__file__).resolve().parents[2] / "src/paperdeck/render/assets"
@@ -18,9 +18,11 @@ def page(request, tmp_path):
 <ol>
 <li data-level="1">
 <a class="pd-ref pd-toc-link" href="#sec-1">Introduction</a>
+<ol></ol>
 </li>
 <li data-level="1">
 <a class="pd-ref pd-toc-link" href="#sec-2">Method</a>
+<ol><li data-level="2"><a href="#sec-2">A subsection</a></li></ol>
 </li>
 </ol>
 </nav>
@@ -78,7 +80,7 @@ def test_math_popup_jump_back(page):
     assert page.locator("#eq-1 .pd-eq-number").inner_text() == "(1)"
     link = page.locator("#para-1 .pd-ref")
     link.focus()
-    assert page.locator("#pd-popup .katex").count() == 1
+    expect(page.locator("#pd-popup .katex")).to_have_count(1)
     assert link.get_attribute("aria-describedby") == "pd-popup"
     assert page.locator("#pd-popup [id]").count() == 0
     page.keyboard.press("Escape")
@@ -94,6 +96,13 @@ def test_math_popup_jump_back(page):
 
 
 def test_theme_keyboard_help_responsive_print(page):
+    assert page.locator("#pd-toc .pd-disclosure").count() == 1
+    disclosure = page.locator("#pd-toc .pd-disclosure")
+    assert disclosure.get_attribute("aria-expanded") == "true"
+    disclosure.click()
+    assert not page.get_by_text("A subsection", exact=True).is_visible()
+    disclosure.click()
+    assert page.get_by_text("A subsection", exact=True).is_visible()
     page.locator("#pd-theme-toggle").click()
     assert page.locator("html").get_attribute("data-theme-mode") == "light"
     page.keyboard.press("d")
@@ -108,7 +117,7 @@ def test_theme_keyboard_help_responsive_print(page):
     page.set_viewport_size({"width": 800, "height": 700})
     page.wait_for_function("!document.body.classList.contains('pd-toc-open')")
     page.locator("#pd-toc-toggle").click()
-    page.locator('#pd-toc a[href="#sec-2"]').click()
+    page.locator('#pd-toc a.pd-toc-link[href="#sec-2"]').click()
     assert not page.locator("#pd-toc").is_visible()
     page.emulate_media(media="print")
     assert not page.locator("#pd-header").is_visible()
@@ -126,3 +135,33 @@ def test_position_restore_and_top(page):
     page.wait_for_function("scrollY === 0")
     page.reload()
     assert page.evaluate("scrollY") == 0
+
+
+def test_keyboard_sections_guards_and_duplicate_registry(page):
+    page.keyboard.press("j")
+    assert page.locator("#sec-1 h2").bounding_box()["y"] >= 53
+    page.keyboard.press("j")
+    # The final heading is clamped by the document bottom and lazy equation layout.
+    expect(page.locator("#sec-2 h2")).to_be_in_viewport(ratio=1)
+    page.keyboard.press("k")
+    page.wait_for_function(
+        "Math.abs(document.querySelector('#sec-1 h2').getBoundingClientRect().top - 72) < 2"
+    )
+    before = page.locator("html").get_attribute("data-theme-mode")
+    page.keyboard.press("Meta+d")
+    assert page.locator("html").get_attribute("data-theme-mode") == before
+    assert page.evaluate("""() => {
+      try { pd.keys.register('j', 'duplicate', () => {}); return false; }
+      catch (error) { return error.message.includes('Duplicate shortcut'); }
+    }""")
+
+
+def test_storage_denial_does_not_break_reader(page):
+    page.add_init_script("""Object.defineProperty(window, 'localStorage', {
+      get() { throw new DOMException('Blocked', 'SecurityError'); }
+    });""")
+    page.reload()
+    page.locator("#pd-theme-toggle").click()
+    assert page.locator("html").get_attribute("data-theme-mode") == "light"
+    page.keyboard.press("?")
+    expect(page.locator("#pd-help")).to_be_visible()
