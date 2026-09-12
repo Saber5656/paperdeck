@@ -92,6 +92,7 @@ def assemble_pdf(
     for idx, text in enumerate(paragraph_texts):
         all_splices.append(link_structural_refs([text], numbers_map)[0] + cite_splices[idx])
     body: list[Any] = []
+    paragraph_index_by_id: dict[str, int] = {}
     section_stack: list[Any] = []
     section_counters: list[int] = []
     para_idx = 0
@@ -138,6 +139,8 @@ def assemble_pdf(
             numbers_map[("sec", number)] = sid
         elif info.role == "paragraph":
             pid = f"para-{para_idx + 1}"
+            paragraph_sources[pid] = block.text
+            paragraph_index_by_id[pid] = para_idx
             add_node(Paragraph(id=pid, content=apply_splices(block.text, all_splices[para_idx])))
             para_idx += 1
         elif info.role == "display_equation" and block.id in eq_result.equations:
@@ -182,7 +185,10 @@ def assemble_pdf(
             if info.number_text:
                 numbers_map[("tab", info.number_text.strip("()"))] = tid
     # Resolve structural references after node anchors are known.
-    source_indices = {block.id: i for i, block in enumerate(paragraph_blocks)}
+    source_indices = {
+        **{block.id: i for i, block in enumerate(paragraph_blocks)},
+        **paragraph_index_by_id,
+    }
 
     def resolve_nodes(nodes: list[Any]) -> list[Any]:
         resolved: list[Any] = []
