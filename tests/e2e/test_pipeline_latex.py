@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import io
 import json
 import os
@@ -15,7 +17,18 @@ GOLDENS = ROOT / "tests" / "goldens" / "latex"
 
 
 def _portable_html(html: str) -> str:
-    """Normalize the one environment-dependent value in rendered HTML."""
+    """Normalize environment-dependent provenance while preserving CSP integrity."""
+    data_match = re.search(
+        r'(<script type="application/json" id="pd-data">)(.*?)(</script>)', html, re.DOTALL
+    )
+    if data_match is not None:
+        original_data = data_match.group(2)
+        normalized_data = re.sub(r'("docId":\s*)"[0-9a-f]{16}"', r'\1"DOC_ID"', original_data)
+        if normalized_data != original_data:
+            old_hash = base64.b64encode(hashlib.sha256(original_data.encode()).digest()).decode()
+            new_hash = base64.b64encode(hashlib.sha256(normalized_data.encode()).digest()).decode()
+            html = html[: data_match.start(2)] + normalized_data + html[data_match.end(2) :]
+            html = html.replace(f"sha256-{old_hash}", f"sha256-{new_hash}")
     return re.sub(r"(<p>pandoc )[^<]+(</p>)", r"\1VERSION\2", html)
 
 
@@ -116,6 +129,13 @@ def test_html_golden_detects_content_corruption(tmp_path: Path) -> None:
     golden.write_text(corrupted, encoding="utf-8")
     with pytest.raises(AssertionError):
         _assert_or_update_golden(golden, content, False)
+
+
+def test_portable_html_normalizes_doc_id_and_its_csp_hash() -> None:
+    content = (GOLDENS / "minimal.html").read_text(encoding="utf-8")
+    changed = content.replace('"docId": "DOC_ID"', '"docId": "879093436cb65bfe"', 1)
+    assert changed != content
+    assert _portable_html(changed) == content
 
 
 def _seed_arxiv_cache(cache_home: Path) -> None:
