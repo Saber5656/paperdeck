@@ -7,6 +7,7 @@ import pytest
 
 from paperdeck.config import load_settings
 from paperdeck.engines import EngineContext
+from paperdeck.engines.arxiv_html import fetch as fetch_module
 from paperdeck.engines.arxiv_html import parse_content
 from paperdeck.errors import ConversionError
 from paperdeck.input.arxiv import HtmlArtifact
@@ -82,3 +83,36 @@ def test_engine_gate_failure_keeps_reason_code(
     with pytest.raises(ConversionError, match="quality") as exc:
         parse_content.ArxivHtmlEngine().convert(_ctx(tmp_path))
     assert exc.value.code == "html-stub"
+
+
+def test_fetch_html_rejects_local_specs_and_reuses_resolved_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    local = EngineContext(
+        InputSpec("latex-local", path=tmp_path / "x.tex", original="x.tex"),
+        load_settings(None, {}),
+        CacheManager(tmp_path / "cache-local"),
+        tmp_path,
+        lambda _: True,
+    )
+    assert fetch_module.fetch_html(local) is None
+
+    artifact = HtmlArtifact(tmp_path / "index.html", {}, [], "fixture")
+    calls: list[tuple[str, int]] = []
+
+    class FakeClient:
+        def __init__(self, *_: object) -> None:
+            pass
+
+        def metadata(self, arxiv_id: str, version: int | None) -> object:
+            raise AssertionError("metadata must not be fetched when supplied")
+
+        def html_page(self, arxiv_id: str, version: int) -> HtmlArtifact:
+            calls.append((arxiv_id, version))
+            return artifact
+
+    monkeypatch.setattr(fetch_module, "ArxivClient", FakeClient)
+    monkeypatch.setattr(fetch_module, "NetGate", lambda settings: object())
+    metadata = SimpleNamespace(id="2401.12345", resolved_version=3)
+    result = fetch_module.fetch_html(_ctx(tmp_path), metadata)
+    assert result == artifact and calls == [("2401.12345", 3)]

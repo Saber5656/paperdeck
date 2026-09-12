@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from paperdeck.errors import SecurityError
+from paperdeck.errors import FetchError, InputError, SecurityError
 from paperdeck.input.arxiv import ArxivClient
 from paperdeck.input.cache import CacheManager
 
@@ -47,6 +47,18 @@ class DownloadGate(FakeGate):
         self.calls += 1
         destination.write_bytes(self.payloads[url])
         return destination
+
+
+class ScriptGate(DownloadGate):
+    def __init__(self, payloads: dict[str, bytes], failures: dict[str, str]):
+        super().__init__(payloads)
+        self.failures = failures
+
+    def download(self, url: str, destination: Path, purpose: str) -> Path:
+        if url in self.failures:
+            self.calls += 1
+            raise FetchError("missing", "retry", self.failures[url])
+        return super().download(url, destination, purpose)
 
 
 def test_metadata_fields_and_cache(tmp_path: Path) -> None:
@@ -106,3 +118,53 @@ def test_eprint_classifies_tar_gzip_single_and_pdf(tmp_path: Path) -> None:
         ArxivClient(pdf_gate, CacheManager(tmp_path / "pdf")).eprint("2401.12347", 1).kind
         == "pdf-only"
     )
+
+
+def test_metadata_invalid_not_found_and_version_errors(tmp_path: Path) -> None:
+    with pytest.raises(FetchError) as exc:
+        ArxivClient(
+            FakeGate(httpx.Response(200, content=b"broken")), CacheManager(tmp_path / "bad")
+        ).metadata("2401.12345", None)
+    assert exc.value.code == "metadata-invalid-xml"
+    empty = b'<feed xmlns="http://www.w3.org/2005/Atom"/>'
+    with pytest.raises(InputError) as exc:
+        ArxivClient(
+            FakeGate(httpx.Response(200, content=empty)), CacheManager(tmp_path / "empty")
+        ).metadata("2401.12345", None)
+    assert exc.value.code == "arxiv-id-not-found"
+    with pytest.raises(InputError) as exc:
+        ArxivClient(
+            FakeGate(httpx.Response(200, content=ATOM)), CacheManager(tmp_path / "version")
+        ).metadata("hep-th/9901001", 3)
+    assert exc.value.code == "arxiv-version-not-found"
+
+
+def test_eprint_and_pdf_cache_hits_and_reject_bad_downloads(tmp_path: Path) -> None:
+    cache = CacheManager(tmp_path / "paperdeck")
+    cache.put("arxiv/2401.12345/1/source.tex", b"tex")
+    cache.put("arxiv/2401.12345/1/paper.pdf", b"%PDF-1.7")
+    gate = DownloadGate({})
+    client = ArxivClient(gate, cache)
+    assert client.eprint("2401.12345", 1).path.read_bytes() == b"tex"
+    assert client.pdf("2401.12345", 1).read_bytes() == b"%PDF-1.7"
+
+    bad = DownloadGate({"https://export.arxiv.org/e-print/2401.12346v1": b"garbage"})
+    with pytest.raises(FetchError) as exc:
+        ArxivClient(bad, CacheManager(tmp_path / "bad-eprint")).eprint("2401.12346", 1)
+    assert exc.value.code == "eprint-unrecognized"
+    bad_pdf = DownloadGate({"https://export.arxiv.org/pdf/2401.12346v1": b"not pdf"})
+    with pytest.raises(FetchError) as exc:
+        ArxivClient(bad_pdf, CacheManager(tmp_path / "bad-pdf")).pdf("2401.12346", 1)
+    assert exc.value.code == "pdf-unrecognized"
+
+
+def test_html_page_retries_second_host_and_invalid_asset_types_are_skipped(tmp_path: Path) -> None:
+    first = "https://export.arxiv.org/html/2401.12345v1"
+    second = "https://arxiv.org/html/2401.12345v1"
+    html = b'<html><img src="bad.gif"><img src="data:image/png;base64,x"></html>'
+    gate = ScriptGate(
+        {second: html, "https://arxiv.org/html/bad.gif": b"GIF89a"}, {first: "http-404"}
+    )
+    artifact = ArxivClient(gate, CacheManager(tmp_path / "paperdeck")).html_page("2401.12345", 1)
+    assert artifact is not None and artifact.asset_map == {} and len(artifact.skipped_images) == 2
+    assert gate.calls == 3

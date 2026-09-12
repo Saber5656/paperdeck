@@ -9,6 +9,7 @@ from paperdeck.engines import EngineContext
 from paperdeck.engines.select import plan, run_plan
 from paperdeck.errors import (
     AllEnginesFailedError,
+    ConfigError,
     ConversionError,
     CostLimitError,
     FetchError,
@@ -160,3 +161,56 @@ def test_fetch_and_llm_errors_from_availability_fall_back(tmp_path: Path) -> Non
     with pytest.raises(AllEnginesFailedError) as exc:
         run_plan(["pdf"], context, {"pdf": llm})
     assert exc.value.attempts[0].reason_code == "llm-not-configured"
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [
+        (FetchError("down", "retry", "network-error"), "convert-failed:network-error"),
+        (LlmError("failed", "retry", "timeout"), "llm-not-configured"),
+        (ConfigError("missing", "configure", "config-error"), "llm-not-configured"),
+    ],
+)
+def test_runtime_fetch_llm_and_config_errors_fall_back(
+    tmp_path: Path, error: Exception, expected: str
+) -> None:
+    name = "pdf" if isinstance(error, (LlmError, ConfigError)) else "latex"
+    engine = Stub(name, error=error)
+    context = _ctx(tmp_path, kind="pdf-local" if name == "pdf" else "latex-local")
+    with pytest.raises(AllEnginesFailedError) as exc:
+        run_plan([name], context, {name: engine})
+    assert exc.value.attempts[0].reason_code == expected
+
+
+def test_offline_pdf_is_skipped_before_engine_calls(tmp_path: Path) -> None:
+    pdf = Stub("pdf")
+    with pytest.raises(AllEnginesFailedError) as exc:
+        run_plan(["pdf"], _ctx(tmp_path, offline=True, kind="pdf-local"), {"pdf": pdf})
+    assert exc.value.attempts[0].reason_code == "offline-uncached"
+    assert pdf.calls == 0
+
+
+def test_missing_registry_engine_is_recorded(tmp_path: Path) -> None:
+    with pytest.raises(AllEnginesFailedError) as exc:
+        run_plan(["latex"], _ctx(tmp_path), {})
+    assert exc.value.attempts[0].reason_code == "convert-failed:unknown-engine"
+
+
+def test_default_registry_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Dummy:
+        def __init__(self) -> None:
+            self.name = "dummy"
+
+    modules = {
+        name: type("Module", (), {cls: Dummy})
+        for name, cls in (
+            ("paperdeck.engines.arxiv_html.parse_content", "ArxivHtmlEngine"),
+            ("paperdeck.engines.latex.engine", "LatexEngine"),
+            ("paperdeck.engines.pdf.engine", "PdfEngine"),
+        )
+    }
+    monkeypatch.setattr("paperdeck.engines.select.import_module", modules.__getitem__)
+    from paperdeck.engines.select import _registry
+
+    result = _registry(None)
+    assert set(result) == {"arxiv-html", "latex", "pdf"}

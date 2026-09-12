@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from paperdeck.errors import FetchError, SecurityError
+from paperdeck.errors import ConfigError, FetchError, SecurityError
 from paperdeck.netgate import NetGate
 
 
@@ -75,6 +75,75 @@ def test_decoded_response_cap_blocks_compressed_bomb(
 
 
 def test_remote_plain_http_llm_is_rejected() -> None:
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(ConfigError) as exc:
         NetGate(settings(base_url="http://api.example.test/v1"))
     assert getattr(exc.value, "code", None) == "llm-http-not-local"
+
+
+def test_download_success_status_and_network_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("paperdeck.netgate._ARXIV_RATE_LIMITER.wait", lambda: None)
+    gate = NetGate(
+        settings(),
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"ok")),
+    )
+    destination = tmp_path / "artifact"
+    assert gate.download("https://export.arxiv.org/x", destination, "arxiv") == destination
+    assert destination.read_bytes() == b"ok" and not destination.with_name("artifact.tmp").exists()
+
+    status_gate = NetGate(
+        settings(),
+        transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+    )
+    with pytest.raises(FetchError) as exc:
+        status_gate.download("https://export.arxiv.org/x", tmp_path / "status", "arxiv")
+    assert exc.value.code == "http-503"
+
+    error_gate = NetGate(
+        settings(),
+        transport=httpx.MockTransport(
+            lambda request: (_ for _ in ()).throw(httpx.ConnectError("down"))
+        ),
+    )
+    with pytest.raises(FetchError) as exc:
+        error_gate.download("https://export.arxiv.org/x", tmp_path / "error", "arxiv")
+    assert exc.value.code == "network-error"
+
+
+def test_arxiv_http_is_upgraded_and_llm_authority_is_exact(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("paperdeck.netgate._ARXIV_RATE_LIMITER.wait", lambda: None)
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, content=b"ok")
+
+    gate = NetGate(settings(), transport=httpx.MockTransport(handler))
+    gate.client("arxiv").get("http://export.arxiv.org/x")
+    assert seen[0].startswith("https://export.arxiv.org/")
+    gate.client("llm").get("https://api.example.test/v1/chat/completions")
+    with pytest.raises(SecurityError):
+        gate.client("llm").get("https://api.example.test:8443/v1/chat/completions")
+
+
+def test_rate_limiter_waits_only_when_interval_remains() -> None:
+    now = [0.0]
+    sleeps: list[float] = []
+
+    def clock() -> float:
+        return now[0]
+
+    def sleep(delay: float) -> None:
+        sleeps.append(delay)
+        now[0] += delay
+
+    from paperdeck.netgate import RateLimiter
+
+    limiter = RateLimiter(3.0, clock=clock, sleeper=sleep)
+    limiter.wait()
+    now[0] += 1.0
+    limiter.wait()
+    now[0] += 3.0
+    limiter.wait()
+    assert sleeps == [2.0]

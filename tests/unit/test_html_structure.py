@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from paperdeck.engines.arxiv_html.parse_structure import parse_structure
 from paperdeck.input.arxiv import HtmlArtifact
 from paperdeck.ir.anchors import AnchorAllocator
-from paperdeck.ir.model import Figure, ListBlock, Paragraph, Table, Unhandled
+from paperdeck.ir.model import CodeBlock, Figure, ListBlock, Paragraph, Quote, Table, Unhandled
 
 
 def _parse(tmp_path: Path, html: str, assets: dict[str, bytes] | None = None):
@@ -53,3 +53,19 @@ def test_structure_unknown_and_duplicate_ids_are_safe(tmp_path: Path) -> None:
         isinstance(item, Paragraph) and item.content[0].text == "direct" for item in children
     )
     assert any(w.code.startswith("ltx-class-unhandled:") for w in result.warnings)
+
+
+def test_structure_handles_missing_assets_nested_tables_quotes_and_code(tmp_path: Path) -> None:
+    html = """<html><head><title>P</title></head><body><section class="ltx_section">
+    <figure class="ltx_figure"><img src="missing.png"/><div class="ltx_caption">missing</div></figure>
+    <figure class="ltx_table"><table class="ltx_tabular"><tr><td><table><tr><td>nested</td></tr></table></td></tr></table></figure>
+    <blockquote class="ltx_quote">quoted</blockquote><pre class="ltx_verbatim">code</pre>
+    </section></body></html>"""
+    result = _parse(tmp_path, html)
+    children = result.body[0].children
+    assert any(isinstance(item, Figure) and item.asset_id is None for item in children)
+    assert any(isinstance(item, Unhandled) for item in children)
+    assert any(isinstance(item, Quote) for item in children)
+    assert any(isinstance(item, CodeBlock) and item.text == "code" for item in children)
+    assert any(item.code == "figure-image-missing" for item in result.warnings)
+    assert any(item.code == "nested-tabular-unhandled" for item in result.warnings)
