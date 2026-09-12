@@ -56,6 +56,11 @@ _STRUCTURAL_TEX = re.compile(
     r"begin\s*\{thebibliography\}\s*\{[^{}]*\}|end\s*\{thebibliography\})\s*$",
     re.DOTALL,
 )
+_BIBLIOGRAPHY_TEX = re.compile(
+    r"^\s*\\begin\s*\{thebibliography\}\s*\{[^{}]*\}.*?"
+    r"\\end\s*\{thebibliography\}\s*$",
+    re.DOTALL,
+)
 
 
 def read_group(text: str, index: int) -> tuple[str | None, int]:
@@ -335,7 +340,12 @@ def _directive_inlines(
             )
             result.append(FootnoteRef(target_id=foot_id, number=number))
         elif isinstance(directive, OtherTex):
-            if _STRUCTURAL_TEX.fullmatch(directive.tex):
+            # A bibliography body is consumed by ``parse_bibliography``.  Pandoc
+            # may still leave that complete raw block as a placeholder; suppress
+            # its duplicate raw-TeX warning only when entries were resolved.
+            if _STRUCTURAL_TEX.fullmatch(directive.tex) or (
+                bib_index and _BIBLIOGRAPHY_TEX.fullmatch(directive.tex)
+            ):
                 continue
             warnings.append(
                 Warning(
