@@ -75,6 +75,24 @@ class _CappedStream(httpx.SyncByteStream):
         self._stream.close()
 
 
+class _CappedResponse(httpx.Response):
+    """Response that enforces a cap after HTTPX content decoding."""
+
+    _paperdeck_cap: int
+
+    def iter_bytes(self, chunk_size: int | None = None):  # type: ignore[no-untyped-def]
+        seen = 0
+        for chunk in httpx.Response.iter_bytes(self, chunk_size):
+            seen += len(chunk)
+            if seen > self._paperdeck_cap:
+                raise FetchError(
+                    "Response exceeded the configured size cap",
+                    "use a smaller artifact or raise the configured fetch limit",
+                    "size-cap",
+                )
+            yield chunk
+
+
 class _GateTransport(httpx.BaseTransport):
     def __init__(
         self,
@@ -125,12 +143,25 @@ class _GateTransport(httpx.BaseTransport):
         # MockTransport and a few custom transports may eagerly populate the
         # private content buffer. Clear it so the cap is enforced by iteration
         # in exactly the same way as a real streamed response.
-        if hasattr(response, "_content"):
-            del response._content
-            response.is_stream_consumed = False
-            response.is_closed = False
+        eager_content = getattr(response, "_content", None)
+        if isinstance(eager_content, bytes):
+            if len(eager_content) > self.cap:
+                raise FetchError(
+                    "Response exceeded the configured size cap",
+                    "use a smaller artifact or raise the configured fetch limit",
+                    "size-cap",
+                )
+            response = httpx.Response(
+                response.status_code,
+                headers=response.headers,
+                stream=httpx.ByteStream(eager_content),
+                extensions=response.extensions,
+            )
         response.stream = _CappedStream(cast(httpx.SyncByteStream, response.stream), self.cap)
-        return response
+        capped = _CappedResponse.__new__(_CappedResponse)
+        capped.__dict__.update(response.__dict__)
+        capped._paperdeck_cap = self.cap
+        return capped
 
     def close(self) -> None:
         self.inner.close()

@@ -1,3 +1,4 @@
+import gzip
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -57,6 +58,22 @@ def test_download_cap_leaves_no_destination(
     with pytest.raises(FetchError) as exc:
         gate.download("https://export.arxiv.org/x", destination, "arxiv")
     assert exc.value.code == "size-cap" and not destination.exists()
+
+
+def test_decoded_response_cap_blocks_compressed_bomb(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("paperdeck.netgate._ARXIV_RATE_LIMITER.wait", lambda: None)
+    payload = gzip.compress(b"x" * (1024 * 1024 + 1))
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200, headers={"content-encoding": "gzip"}, content=payload
+        )
+    )
+    gate = NetGate(settings(), transport=transport)
+    with pytest.raises(FetchError) as exc:
+        gate.client("arxiv").get("https://export.arxiv.org/x")
+    assert exc.value.code == "size-cap"
 
 
 def test_remote_plain_http_llm_is_rejected() -> None:
