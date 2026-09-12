@@ -26,9 +26,7 @@ ATOM = (
     b'<category term="hep-th"/><arxiv:doi>10.1234/test</arxiv:doi></entry></feed>'
 )
 
-MODERN_ATOM = ATOM.replace(b"hep-th/9901001v2", b"2401.12345v3").replace(
-    b"Alice", b"Modern Author"
-)
+MODERN_ATOM = ATOM.replace(b"hep-th/9901001v2", b"2401.12345v3").replace(b"Alice", b"Modern Author")
 
 
 class FakeGate:
@@ -101,9 +99,7 @@ def test_metadata_version_and_offline_cache_rules(tmp_path: Path) -> None:
     with pytest.raises(FetchError) as exc:
         ArxivClient(
             FakeGate(httpx.Response(500), offline=True), CacheManager(tmp_path / "empty")
-        ).metadata(
-            "2401.12345", None
-        )
+        ).metadata("2401.12345", None)
     assert exc.value.code == "offline"
 
 
@@ -237,9 +233,9 @@ def test_html_page_returns_none_when_both_hosts_return_404(tmp_path: Path) -> No
     second = "https://arxiv.org/html/2401.12345v1"
     gate = ScriptGate({}, {first: "http-404", second: "http-404"})
 
-    assert ArxivClient(gate, CacheManager(tmp_path / "paperdeck")).html_page(
-        "2401.12345", 1
-    ) is None
+    assert (
+        ArxivClient(gate, CacheManager(tmp_path / "paperdeck")).html_page("2401.12345", 1) is None
+    )
     assert gate.calls == 2
 
 
@@ -253,9 +249,7 @@ def test_html_page_enforces_two_hundred_image_limit(tmp_path: Path) -> None:
     )
     gate = DownloadGate(payloads)
 
-    artifact = ArxivClient(gate, CacheManager(tmp_path / "paperdeck")).html_page(
-        "2401.12345", 1
-    )
+    artifact = ArxivClient(gate, CacheManager(tmp_path / "paperdeck")).html_page("2401.12345", 1)
 
     assert artifact is not None
     assert len(artifact.asset_map) == 200
@@ -293,9 +287,7 @@ def test_html_page_uses_magic_bytes_over_image_content_type(
 
 
 @pytest.mark.parametrize("method", ["eprint", "pdf", "html_page"])
-def test_uncached_artifacts_fail_offline(
-    method: str, tmp_path: Path
-) -> None:
+def test_uncached_artifacts_fail_offline(method: str, tmp_path: Path) -> None:
     settings = load_settings(None, {"offline": True})
     client = ArxivClient(NetGate(settings), CacheManager(tmp_path / "paperdeck"))
 

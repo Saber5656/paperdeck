@@ -119,7 +119,10 @@ def test_offline_arxiv_matrix_uses_cached_artifact_for_first_available_engine(
             self.key = key
 
         def available(self, ctx: EngineContext) -> tuple[bool, str]:
-            return (ctx.cache.exists(self.key), "" if ctx.cache.exists(self.key) else "offline-uncached")
+            return (
+                ctx.cache.exists(self.key),
+                "" if ctx.cache.exists(self.key) else "offline-uncached",
+            )
 
     spec = InputSpec("arxiv", arxiv_id="2401.12345", original="2401.12345")
     html = CacheAware("arxiv-html", "arxiv/2401.12345/1/html/index.html")
@@ -131,7 +134,9 @@ def test_offline_arxiv_matrix_uses_cached_artifact_for_first_available_engine(
     html_cache.put("arxiv/2401.12345/1/html/index.html", b"html")
     result = run_plan(
         plan(spec, settings=load_settings(None, {"offline": True}), cache=html_cache),
-        EngineContext(spec, load_settings(None, {"offline": True}), html_cache, tmp_path, lambda _: True),
+        EngineContext(
+            spec, load_settings(None, {"offline": True}), html_cache, tmp_path, lambda _: True
+        ),
         registry,
     )
     assert html.calls == 1 and not result.provenance.fallbacks
@@ -140,7 +145,9 @@ def test_offline_arxiv_matrix_uses_cached_artifact_for_first_available_engine(
     source_cache.put("arxiv/2401.12345/1/source.tar.gz", b"source")
     result = run_plan(
         ["arxiv-html", "latex", "pdf"],
-        EngineContext(spec, load_settings(None, {"offline": True}), source_cache, tmp_path, lambda _: True),
+        EngineContext(
+            spec, load_settings(None, {"offline": True}), source_cache, tmp_path, lambda _: True
+        ),
         registry,
     )
     assert latex.calls == 1
@@ -150,7 +157,9 @@ def test_offline_arxiv_matrix_uses_cached_artifact_for_first_available_engine(
     with pytest.raises(AllEnginesFailedError) as exc:
         run_plan(
             ["arxiv-html", "latex", "pdf"],
-            EngineContext(spec, load_settings(None, {"offline": True}), empty, tmp_path, lambda _: True),
+            EngineContext(
+                spec, load_settings(None, {"offline": True}), empty, tmp_path, lambda _: True
+            ),
             registry,
         )
     assert [note.reason_code for note in exc.value.attempts] == [
