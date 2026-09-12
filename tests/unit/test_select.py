@@ -92,6 +92,95 @@ def test_plan_matrix_and_invalid_forced_engine(tmp_path: Path) -> None:
         plan(InputSpec("pdf-local", path=tmp_path / "x.pdf"), "latex")
 
 
+@pytest.mark.parametrize(
+    ("kind", "forced"),
+    [
+        ("pdf-local", "arxiv-html"),
+        ("pdf-local", "latex"),
+        ("latex-local", "arxiv-html"),
+        ("latex-local", "pdf"),
+    ],
+)
+def test_plan_rejects_every_invalid_forced_engine_combination(
+    tmp_path: Path, kind: str, forced: str
+) -> None:
+    path = tmp_path / ("paper.pdf" if kind == "pdf-local" else "paper.tex")
+
+    with pytest.raises(click.UsageError):
+        plan(InputSpec(kind, path=path), forced)
+
+
+def test_offline_arxiv_matrix_uses_cached_artifact_for_first_available_engine(
+    tmp_path: Path,
+) -> None:
+    class CacheAware(Stub):
+        def __init__(self, name: str, key: str):
+            super().__init__(name)
+            self.key = key
+
+        def available(self, ctx: EngineContext) -> tuple[bool, str]:
+            return (ctx.cache.exists(self.key), "" if ctx.cache.exists(self.key) else "offline-uncached")
+
+    spec = InputSpec("arxiv", arxiv_id="2401.12345", original="2401.12345")
+    html = CacheAware("arxiv-html", "arxiv/2401.12345/1/html/index.html")
+    latex = CacheAware("latex", "arxiv/2401.12345/1/source.tar.gz")
+    pdf = CacheAware("pdf", "arxiv/2401.12345/1/paper.pdf")
+    registry = {item.name: item for item in (html, latex, pdf)}
+
+    html_cache = CacheManager(tmp_path / "html-cache")
+    html_cache.put("arxiv/2401.12345/1/html/index.html", b"html")
+    result = run_plan(
+        plan(spec, settings=load_settings(None, {"offline": True}), cache=html_cache),
+        EngineContext(spec, load_settings(None, {"offline": True}), html_cache, tmp_path, lambda _: True),
+        registry,
+    )
+    assert html.calls == 1 and not result.provenance.fallbacks
+
+    source_cache = CacheManager(tmp_path / "source-cache")
+    source_cache.put("arxiv/2401.12345/1/source.tar.gz", b"source")
+    result = run_plan(
+        ["arxiv-html", "latex", "pdf"],
+        EngineContext(spec, load_settings(None, {"offline": True}), source_cache, tmp_path, lambda _: True),
+        registry,
+    )
+    assert latex.calls == 1
+    assert result.provenance.fallbacks[0].reason_code == "offline-uncached"
+
+    empty = CacheManager(tmp_path / "empty-cache")
+    with pytest.raises(AllEnginesFailedError) as exc:
+        run_plan(
+            ["arxiv-html", "latex", "pdf"],
+            EngineContext(spec, load_settings(None, {"offline": True}), empty, tmp_path, lambda _: True),
+            registry,
+        )
+    assert [note.reason_code for note in exc.value.attempts] == [
+        "offline-uncached",
+        "offline-uncached",
+        "offline-uncached",
+    ]
+
+
+def test_selection_progress_lines_are_emitted_for_each_transition(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    class OneThenAvailable(Stub):
+        def __init__(self) -> None:
+            super().__init__("latex")
+            self.availability_calls = 0
+
+        def available(self, ctx: EngineContext) -> tuple[bool, str]:
+            self.availability_calls += 1
+            return (False, "no-main-tex") if self.availability_calls == 1 else (True, "")
+
+    run_plan(["latex", "latex"], _ctx(tmp_path), {"latex": OneThenAvailable()})
+    captured = capsys.readouterr().err.splitlines()
+    assert captured == [
+        "engine: trying latex",
+        "engine: latex failed (no-main-tex) -> falling back to latex",
+        "engine: trying latex",
+    ]
+
+
 def test_run_plan_records_conversion_fallback_and_provenance(tmp_path: Path) -> None:
     first = Stub("latex", error=ConversionError("bad", "retry", "bad-parser"))
     result = run_plan(["latex", "latex"], _ctx(tmp_path), {"latex": first})
