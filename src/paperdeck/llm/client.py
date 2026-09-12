@@ -270,7 +270,13 @@ class LlmClient:
         wire_messages = self._messages_with_images(messages, images)
         version = "v1"
         schema_name = _schema_name(schema)
-        cache_key = request_key(selected, wire_messages, schema_name, version)
+        cache_key = request_key(
+            selected,
+            wire_messages,
+            schema_name,
+            version,
+            provider=str(self.settings.llm.base_url),
+        )
         if self.cache is not None:
             bind = getattr(self.cache, "bind_model", None)
             if bind:
@@ -280,8 +286,12 @@ class LlmClient:
                 try:
                     parsed = schema.model_validate(json.loads(cached))
                     if self.on_usage:
+                        cached_usage = getattr(self.cache, "get_usage", None)
                         self.on_usage(
-                            purpose, selected, {"prompt_tokens": 0, "completion_tokens": 0}, True
+                            purpose,
+                            selected,
+                            cached_usage(cache_key) if cached_usage else {},
+                            True,
                         )
                     return parsed
                 except (ValueError, TypeError, json.JSONDecodeError, ValidationError):
