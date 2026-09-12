@@ -136,6 +136,7 @@ def process_equations(
                 ),
                 images=[image],
                 max_tokens=1024,
+                ledger=ledger,
             )
             latex = str(response.latex)
             if (

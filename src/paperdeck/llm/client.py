@@ -12,10 +12,10 @@ from collections.abc import Callable
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
-import httpx
 from pydantic import BaseModel, ValidationError
 
 from ..errors import ConfigError, LlmError
+from ..netgate import HttpResponse, TimeoutException, TransportError
 from .cache import request_key
 
 log = logging.getLogger(__name__)
@@ -40,6 +40,35 @@ def _schema_name(schema: type[BaseModel]) -> str:
             out.append("_")
         out.append(char.lower())
     return "".join(out)
+
+
+def _strict_wire_schema(schema: type[BaseModel]) -> dict[str, Any]:
+    """Make a Pydantic schema valid for the strict Chat Completions dialect.
+
+    OpenAI's strict mode requires every object property to be listed in
+    ``required``. Pydantic expresses optional values with a nullable ``anyOf``;
+    retaining that shape makes the field required while allowing ``null``.
+    """
+    result = copy.deepcopy(schema.model_json_schema())
+
+    def visit(node: Any) -> None:
+        if not isinstance(node, dict):
+            if isinstance(node, list):
+                for item in node:
+                    visit(item)
+            return
+        if node.get("type") == "object" or "properties" in node:
+            props = node.get("properties", {})
+            if isinstance(props, dict):
+                node["required"] = list(props)
+                node["additionalProperties"] = False
+                for prop in props.values():
+                    visit(prop)
+        for key in ("$defs", "definitions", "items", "anyOf", "oneOf", "allOf"):
+            visit(node.get(key))
+
+    visit(result)
+    return result
 
 
 class LlmClient:
@@ -105,7 +134,7 @@ class LlmClient:
         schema_name = _schema_name(schema)
         if compat:
             instruction = "Return JSON matching this schema exactly: " + json.dumps(
-                schema.model_json_schema(), separators=(",", ":")
+                _strict_wire_schema(schema), separators=(",", ":")
             )
             modified = [dict(m) for m in messages]
             systems = [m for m in modified if m.get("role") == "system"]
@@ -127,7 +156,7 @@ class LlmClient:
                 "type": "json_schema",
                 "json_schema": {
                     "name": schema_name,
-                    "schema": schema.model_json_schema(),
+                    "schema": _strict_wire_schema(schema),
                     "strict": True,
                 },
             },
@@ -135,7 +164,7 @@ class LlmClient:
             "max_tokens": max_tokens,
         }
 
-    def _transport(self, body: dict[str, Any]) -> httpx.Response:
+    def _transport(self, body: dict[str, Any]) -> HttpResponse:
         last: Exception | None = None
         for attempt in range(3):
             try:
@@ -160,7 +189,7 @@ class LlmClient:
                         continue
                 response.raise_for_status()
                 return response  # type: ignore[no-any-return]
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
+            except (TimeoutException, TransportError) as exc:
                 last = exc
                 if attempt < 2:
                     time.sleep((attempt + 1) ** 2 + secrets.SystemRandom().random())
@@ -184,6 +213,7 @@ class LlmClient:
         model: str | None = None,
         images: list[bytes] | None = None,
         max_tokens: int,
+        ledger: Any = None,
     ) -> BaseModel:
         selected = model or self.settings.llm.model
         wire_messages = self._messages_with_images(messages, images)
@@ -215,13 +245,68 @@ class LlmClient:
         last_error = ""
         for validation_attempt in range(int(self.settings.llm.max_retries) + 1):
             body = self._body(selected, current, schema, max_tokens, self._compat_mode)
+            input_chars = sum(len(str(m.get("content", ""))) for m in current)
+            image_tokens = len(images or []) * int(
+                getattr(getattr(self.settings.llm, "estimate", None), "image_tokens_flat", 1100)
+            )
+            estimated_in = max(1, input_chars // 4 + image_tokens)
+            # _transport itself has up to three HTTP retries. Reserve for all of
+            # them so a retry can never bypass the hard cap.
+            reservation = 0.0
+            reservation_tokens = (estimated_in + max_tokens) * 3
+            if ledger is not None:
+                reservation = ledger.reserve_call(
+                    selected, tokens_in=estimated_in * 3, tokens_out=max_tokens * 3
+                )
             response = self._transport(body)
+            if ledger is not None:
+                ledger.release_call(reservation, tokens=reservation_tokens)
+            # Account for this physical request before parsing or validating it:
+            # malformed JSON and truncated replies are billable too. When a
+            # provider omits usage, the conservative request estimate is used.
+            estimated_usage = {
+                "prompt_tokens": estimated_in,
+                "completion_tokens": max_tokens,
+                "estimated": True,
+            }
+            usage_for_record: dict[str, Any] = estimated_usage
+            try:
+                candidate = response.json()
+                if isinstance(candidate, dict) and isinstance(candidate.get("usage"), dict):
+                    candidate_usage = dict(candidate["usage"])
+                    if candidate_usage.get("prompt_tokens") or candidate_usage.get(
+                        "completion_tokens"
+                    ):
+                        usage_for_record = candidate_usage
+            except (ValueError, TypeError):
+                pass
+            if self.on_usage:
+                self.on_usage(purpose, selected, usage_for_record, False)
             if response.status_code == 400 and not self._compat_mode:
                 detail = response.text
                 if "response_format" in detail.lower() or "json_schema" in detail.lower():
                     self._compat_mode = True
                     body = self._body(selected, current, schema, max_tokens, True)
+                    if ledger is not None:
+                        reservation = ledger.reserve_call(
+                            selected, tokens_in=estimated_in * 3, tokens_out=max_tokens * 3
+                        )
                     response = self._transport(body)
+                    if ledger is not None:
+                        ledger.release_call(reservation, tokens=reservation_tokens)
+                    usage_for_record = dict(estimated_usage)
+                    try:
+                        candidate = response.json()
+                        if isinstance(candidate, dict) and isinstance(candidate.get("usage"), dict):
+                            candidate_usage = dict(candidate["usage"])
+                            if candidate_usage.get("prompt_tokens") or candidate_usage.get(
+                                "completion_tokens"
+                            ):
+                                usage_for_record = candidate_usage
+                    except (ValueError, TypeError):
+                        pass
+                    if self.on_usage:
+                        self.on_usage(purpose, selected, usage_for_record, False)
             try:
                 payload = response.json()
                 choice = payload["choices"][0]
@@ -261,11 +346,8 @@ class LlmClient:
                     "Retry the conversion or inspect the model response.",
                     "llm-invalid-json",
                 ) from exc
-            usage = payload.get("usage") or {}
-            if self.on_usage:
-                self.on_usage(purpose, selected, usage, False)
             if self.cache is not None:
-                self.cache.put(cache_key, content, usage)
+                self.cache.put(cache_key, content, usage_for_record)
             return validated
         raise LlmError("LLM returned invalid JSON", "Retry the conversion.", "llm-invalid-json")
 

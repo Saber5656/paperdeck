@@ -16,6 +16,11 @@ from . import __version__
 from .errors import ConfigError, FetchError, SecurityError
 
 Purpose = Literal["arxiv", "llm"]
+# Public aliases keep transport exception and response handling behind this
+# single HTTP boundary. Engines and LLM code must not import httpx directly.
+HttpResponse = httpx.Response
+TimeoutException = httpx.TimeoutException
+TransportError = httpx.TransportError
 _ARXIV_HOSTS = {"arxiv.org", "www.arxiv.org", "export.arxiv.org"}
 _LOG = logging.getLogger(__name__)
 

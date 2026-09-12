@@ -9,6 +9,9 @@ from typing import Any
 
 from ..errors import CostLimitError
 
+_UNKNOWN_INPUT_PER_MTOK = 10.0
+_UNKNOWN_OUTPUT_PER_MTOK = 30.0
+
 
 @dataclass(frozen=True)
 class CostEstimate:
@@ -67,7 +70,9 @@ class Ledger:
         self._records: list[dict[str, Any]] = []
         self._tokens_in = 0
         self._tokens_out = 0
-        self._spent: float | None = 0.0 if _pricing(settings, self.model) is not None else None
+        self._spent = 0.0
+        self._reserved_usd = 0.0
+        self._reserved_tokens = 0
         self.cache_hits = 0
 
     @property
@@ -84,9 +89,11 @@ class Ledger:
                 self.cache_hits += 1
             self._tokens_in += pin
             self._tokens_out += pout
-            price = _pricing(self.settings, model)
-            if self._spent is not None and price is not None:
-                self._spent += pin * price[0] / 1_000_000 + pout * price[1] / 1_000_000
+            price = _pricing(self.settings, model) or (
+                _UNKNOWN_INPUT_PER_MTOK,
+                _UNKNOWN_OUTPUT_PER_MTOK,
+            )
+            self._spent += pin * price[0] / 1_000_000 + pout * price[1] / 1_000_000
             self._records.append(
                 {
                     "purpose": purpose,
@@ -97,7 +104,7 @@ class Ledger:
                 }
             )
 
-    def spent_usd(self) -> float | None:
+    def spent_usd(self) -> float:
         with self._lock:
             return self._spent
 
@@ -108,41 +115,53 @@ class Ledger:
     def check_budget(self, next_call_estimate_usd: float | None, *, next_tokens: int = 0) -> None:
         with self._lock:
             limit = float(self.settings.llm.max_cost_usd)
-            if self._spent is None:
-                if self.token_count() + next_tokens > 2_000_000:
-                    raise CostLimitError(
-                        "LLM token budget exceeded",
-                        "Reduce the PDF size or configure model pricing.",
-                        float(self.token_count() + next_tokens),
-                        2_000_000.0,
-                    )
-                return
             amount = float(next_call_estimate_usd or 0)
-            if self._spent + amount > limit:
+            if self._spent + float(self._reserved_usd or 0.0) + amount > limit:
+                total = self._spent + float(self._reserved_usd or 0.0) + amount
                 raise CostLimitError(
-                    f"LLM cost limit exceeded (${self._spent + amount:.2f} > ${limit:.2f})",
+                    f"LLM cost limit exceeded (${total:.2f} > ${limit:.2f})",
                     "Increase max_cost_usd or use the LLM cache.",
-                    self._spent + amount,
+                    total,
                     limit,
                 )
 
+    def reserve_call(self, model: str, *, tokens_in: int, tokens_out: int) -> float:
+        """Reserve a conservative physical request before it reaches the network.
+
+        The reservation is released by :meth:`release_call` once the response has
+        been recorded.  This makes a zero budget and concurrent calls fail before
+        any request is sent, while still charging retries through separate calls.
+        """
+        pin = max(0, int(tokens_in))
+        pout = max(0, int(tokens_out))
+        price = _pricing(self.settings, model)
+        with self._lock:
+            if price is None:
+                price = (_UNKNOWN_INPUT_PER_MTOK, _UNKNOWN_OUTPUT_PER_MTOK)
+            amount = pin * price[0] / 1_000_000 + pout * price[1] / 1_000_000
+            self.check_budget(amount, next_tokens=pin + pout)
+            self._reserved_usd += amount
+            self._reserved_tokens += pin + pout
+        return float(amount)
+
+    def release_call(self, amount: float, *, tokens: int = 0) -> None:
+        with self._lock:
+            self._reserved_usd = max(0.0, self._reserved_usd - max(0.0, amount))
+            self._reserved_tokens = max(0, self._reserved_tokens - max(0, int(tokens)))
+
     def remaining_allows(self, estimate: float | int | None) -> bool:
         try:
-            if self._spent is None:
-                self.check_budget(None, next_tokens=int(estimate or 0))
-            else:
-                self.check_budget(float(estimate) if estimate is not None else 0.0)
+            self.check_budget(float(estimate) if estimate is not None else 0.0)
         except CostLimitError:
             return False
         return True
 
     def call_estimate(self, purpose: str = "equation") -> float:
         """Estimate one call in USD for degradation checks."""
-        if self._spent is None:
-            return 1024.0
-        price = _pricing(self.settings, self.model)
-        if price is None:
-            return 0.0
+        price = _pricing(self.settings, self.model) or (
+            _UNKNOWN_INPUT_PER_MTOK,
+            _UNKNOWN_OUTPUT_PER_MTOK,
+        )
         image_tokens = int(self.settings.llm.estimate.image_tokens_flat) + 200
         output_tokens = 1024 if purpose == "equation" else 4096
         return image_tokens * price[0] / 1_000_000 + output_tokens * price[1] / 1_000_000

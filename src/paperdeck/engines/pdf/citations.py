@@ -67,6 +67,7 @@ def extract_bibliography(
             [{"role": "system", "content": load_prompt("bib", text=chunk)}],
             PdfBibV1,
             max_tokens=8192,
+            ledger=ledger,
         )
         for _item_idx, item in enumerate(response.entries):
             number = str(item.number).strip("[]") if item.number else None
@@ -122,7 +123,7 @@ def _non_overlapping(items: list[Splice]) -> list[Splice]:
 
 
 def link_citations(
-    paragraph_texts: list[str], bib: list[Any], llm: Any = None
+    paragraph_texts: list[str], bib: list[Any], llm: Any = None, ledger: Any = None
 ) -> list[list[Splice]]:
     numeric = {
         str(getattr(entry, "number", "")): str(getattr(entry, "id", ""))
@@ -161,6 +162,7 @@ def link_citations(
             ],
             PdfCiteMapV1,
             max_tokens=4096,
+            ledger=ledger,
         )
         for mapping in response.mappings:
             try:
