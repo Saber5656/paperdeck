@@ -40,4 +40,10 @@ def test_all_subclasses_have_exit_codes_and_hints() -> None:
 def test_security_content_is_bounded_and_sanitized() -> None:
     rendered, _ = present_error(SecurityError("x\x1b[31m" + "A" * 10_000, "fix"), 0)
     assert "\x1b" not in rendered
-    assert len(rendered) <= 240
+    assert "[31m" not in rendered
+    assert len(rendered) <= 200
+
+
+def test_security_content_stays_bounded_with_verbose_traceback() -> None:
+    rendered, _ = present_error(SecurityError("A" * 10_000, "B" * 10_000), 2)
+    assert len(rendered) <= 200

@@ -85,6 +85,30 @@ def test_gzip_single_bomb_leaves_no_output(tmp_path: Path) -> None:
     assert exc.value.code == "archive-bomb" and not destination.exists()
 
 
+def test_gzip_compression_ratio_bomb_leaves_no_output(tmp_path: Path) -> None:
+    source = tmp_path / "ratio.gz"
+    source.write_bytes(gzip.compress(b"x" * 200_000))
+    destination = tmp_path / "ratio.tex"
+    with pytest.raises(SecurityError) as exc:
+        gunzip_file(source, destination, 1)
+    assert exc.value.code == "archive-bomb"
+    assert not destination.exists()
+
+
+def test_tar_gzip_compression_ratio_bomb_leaves_no_output(tmp_path: Path) -> None:
+    source = tmp_path / "ratio.tar.gz"
+    with tarfile.open(source, "w:gz") as archive:
+        info = tarfile.TarInfo("main.tex")
+        payload = b"x" * 200_000
+        info.size = len(payload)
+        archive.addfile(info, io.BytesIO(payload))
+    destination = tmp_path / "ratio-out"
+    with pytest.raises(SecurityError) as exc:
+        extract_tar(source, destination, Limits())
+    assert exc.value.code == "archive-bomb"
+    assert not destination.exists()
+
+
 def test_allows_safe_relative_symlink_and_hardlink(tmp_path: Path) -> None:
     archive = tmp_path / "links.tar"
     with tarfile.open(archive, "w") as tar:
